@@ -1,0 +1,173 @@
+#!/usr/bin/env python3
+"""
+Regenerate src/data/staff.generated.ts from the staff-training workbook.
+
+Competency in that workbook is encoded as the cell FILL COLOUR, not the text.
+The text (when present) records how many training sessions a person has had,
+or a free-text note. Both are carried across.
+
+Usage:  python3 scripts/generate-staff.py path/to/WHProgram-StaffTraining.xlsx
+"""
+import re
+import sys
+import unicodedata
+
+import openpyxl
+
+# fill colour -> competency level, per the legend block at the top of each sheet
+FILL_LEVELS = {
+    "FF00B050": "trainer",        # I can train others
+    "FF92D050": "can_run",        # I can run it
+    "FFFFFF00": "in_training",    # I have done some training
+    "FFFFC000": "wants_to_learn", # I want to learn
+    "FFFF0000": "no",             # I do not want to learn
+}
+# Roonka only: "I can run it at WH but have yet to at Roonka" (a theme colour)
+THEME_LEVELS = {9: "can_run_elsewhere"}
+
+HEADER_ROW = {"Woodhouse": 13, "Roonka": 12}
+
+
+def slug(text):
+    text = unicodedata.normalize("NFKD", str(text))
+    text = re.sub(r"[^a-zA-Z0-9]+", "-", text).strip("-").lower()
+    return text or "x"
+
+
+def level_of(cell):
+    fill = cell.fill
+    if fill is None or fill.fgColor is None:
+        return None
+    fg = fill.fgColor
+    if fg.type == "rgb" and fg.rgb:
+        return FILL_LEVELS.get(fg.rgb)
+    if fg.type == "theme":
+        return THEME_LEVELS.get(fg.theme)
+    return None
+
+
+def clean(value):
+    if value is None:
+        return None
+    text = " ".join(str(value).split())
+    return text or None
+
+
+def read_sheet(ws, site):
+    head = HEADER_ROW[ws.title]
+    people = {}
+    for cell in ws[head]:
+        name = clean(cell.value)
+        if name and cell.column >= 3:
+            people[cell.column] = name
+
+    rows = []
+    for row in ws.iter_rows(min_row=head + 1, max_row=ws.max_row):
+        activity = clean(row[0].value)
+        if not activity or activity.upper().startswith("JUNIOR PROGRAMS"):
+            continue
+        rows.append((activity, row))
+
+    staff = {}
+    for col, name in people.items():
+        entries = []
+        for activity, row in rows:
+            cell = row[col - 1]
+            level = level_of(cell)
+            note = clean(cell.value)
+            if level is None and note is None:
+                continue
+            entry = {"activity": activity, "level": level or "unknown"}
+            if note:
+                entry["note"] = note
+            entries.append(entry)
+        if entries:
+            staff[name] = entries
+    return {"site": site, "staff": staff}
+
+
+def ts_string(text):
+    return "'" + str(text).replace("\\", "\\\\").replace("'", "\\'") + "'"
+
+
+def main():
+    path = sys.argv[1]
+    wb = openpyxl.load_workbook(path)
+    sites = {
+        "woodhouse": read_sheet(wb["Woodhouse"], "woodhouse"),
+        "roonka": read_sheet(wb["Roonka"], "roonka"),
+    }
+
+    # merge people who appear on both sheets into a single staff record
+    merged = {}
+    for site_key, data in sites.items():
+        for name, entries in data["staff"].items():
+            record = merged.setdefault(
+                slug(name), {"id": slug(name), "name": name, "sites": [], "competency": []}
+            )
+            if site_key not in record["sites"]:
+                record["sites"].append(site_key)
+            for entry in entries:
+                record["competency"].append({**entry, "site": site_key})
+
+    # Emit a compact, index-based form. Written out one entry per object the
+    # obvious way this file is ~5x larger, which is a lot of bundle for data
+    # that never changes at runtime.
+    activity_names = sorted({e["activity"] for r in merged.values() for e in r["competency"]})
+    activity_index = {name: i for i, name in enumerate(activity_names)}
+    levels = ["trainer", "can_run", "can_run_elsewhere", "in_training",
+              "wants_to_learn", "no", "unknown"]
+    level_index = {name: i for i, name in enumerate(levels)}
+    site_index = {"woodhouse": 0, "roonka": 1}
+
+    rows = []
+    for record in sorted(merged.values(), key=lambda r: r["name"].lower()):
+        entries = []
+        for entry in record["competency"]:
+            parts = [
+                str(activity_index[entry["activity"]]),
+                str(site_index[entry["site"]]),
+                str(level_index.get(entry["level"], level_index["unknown"])),
+            ]
+            if entry.get("note"):
+                parts.append(ts_string(entry["note"]))
+            entries.append("[" + ",".join(parts) + "]")
+        rows.append(
+            "  [{}, {}, [{}], [{}]],".format(
+                ts_string(record["id"]),
+                ts_string(record["name"]),
+                ",".join(str(site_index[s]) for s in record["sites"]),
+                ",".join(entries),
+            )
+        )
+
+    out = [
+        "// AUTO-GENERATED by scripts/generate-staff.py — do not edit by hand.",
+        "// Source: WHProgram-StaffTraining.xlsx (competency encoded as cell fill colour).",
+        "// Re-run: python3 scripts/generate-staff.py <workbook.xlsx>",
+        "//",
+        "// Stored in an index-compressed form and expanded on load — see staff.ts.",
+        "",
+        "export const ACTIVITY_NAMES: string[] = [",
+    ]
+    for name in activity_names:
+        out.append(f"  {ts_string(name)},")
+    out.append("]")
+    out.append("")
+    out.append("/** [id, name, siteIndexes, [[activityIndex, siteIndex, levelIndex, note?], …]] */")
+    out.append("export type PackedStaff = [string, string, number[], (number | string)[][]]")
+    out.append("")
+    out.append("export const PACKED_STAFF: PackedStaff[] = [")
+    out.extend(rows)
+    out.append("]")
+    out.append("")
+
+    dest = "src/data/staff.generated.ts"
+    with open(dest, "w", encoding="utf-8") as fh:
+        fh.write("\n".join(out))
+    print(f"wrote {dest}: {len(merged)} staff, "
+          f"{sum(len(r['competency']) for r in merged.values())} competency entries")
+
+
+if __name__ == "__main__":
+    main()
