@@ -1,5 +1,5 @@
 import type { ProgramDocument } from '@/types'
-import { DOCUMENT_VERSION } from '@/types'
+import { DOCUMENT_VERSION, EMPTY_OVERRIDES } from '@/types'
 
 const STORAGE_KEY = 'wh-program:document:v1'
 const PREFS_KEY = 'wh-program:prefs:v1'
@@ -11,6 +11,8 @@ export interface Prefs {
   dayStartMin: number
   dayEndMin: number
   showConflicts: boolean
+  /** Show venue and staff on blocks that are tall enough. */
+  showBlockDetail: boolean
 }
 
 export const DEFAULT_PREFS: Prefs = {
@@ -20,6 +22,7 @@ export const DEFAULT_PREFS: Prefs = {
   dayStartMin: 7 * 60,
   dayEndMin: 21 * 60 + 30,
   showConflicts: true,
+  showBlockDetail: true,
 }
 
 /**
@@ -48,6 +51,19 @@ function migrate(raw: unknown): ProgramDocument | null {
       kind: block.kind ?? 'activity',
     })),
     customActivities: doc.customActivities ?? [],
+    // v4 added in-app editing of activities, venues and staff.
+    customVenues: doc.customVenues ?? [],
+    customStaff: doc.customStaff ?? [],
+    overrides: {
+      ...EMPTY_OVERRIDES,
+      ...(doc.overrides ?? {}),
+      activities: doc.overrides?.activities ?? {},
+      venues: doc.overrides?.venues ?? {},
+      staff: doc.overrides?.staff ?? {},
+      hiddenActivityIds: doc.overrides?.hiddenActivityIds ?? [],
+      hiddenVenueIds: doc.overrides?.hiddenVenueIds ?? [],
+      hiddenStaffIds: doc.overrides?.hiddenStaffIds ?? [],
+    },
     updatedAt: doc.updatedAt ?? new Date().toISOString(),
   }
 }

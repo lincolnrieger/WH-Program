@@ -25,6 +25,8 @@ export interface ScheduleGridProps {
   zoom: number
   dark: boolean
   showConflicts: boolean
+  /** Show venue and staff on blocks tall enough for it. */
+  showDetail: boolean
   onSelect: (blockId: string, additive: boolean) => void
   onBackgroundClick: () => void
   /** Click on empty grid space — used to create a block at that time. */
@@ -40,7 +42,7 @@ export interface ScheduleGridProps {
  */
 export function ScheduleGrid({
   gridId, booking, date, blocks, activities, venueNames, staffNames, issues,
-  selection, highlightIds, dayStartMin, dayEndMin, zoom, dark, showConflicts,
+  selection, highlightIds, dayStartMin, dayEndMin, zoom, dark, showConflicts, showDetail,
   onSelect, onBackgroundClick, onEmptyDoubleClick, compact = false,
 }: ScheduleGridProps) {
   const canvasRef = useRef<HTMLDivElement>(null)
@@ -167,8 +169,8 @@ export function ScheduleGrid({
               selected={selection.includes(block.id)}
               highlighted={highlightIds.includes(block.id)}
               issues={issuesByBlock.get(block.id) ?? []}
-              venueName={block.venueId ? venueNames.get(block.venueId) : undefined}
-              staffNames={block.staffIds.map((id) => staffNames.get(id) ?? id)}
+              venueName={showDetail && block.venueId ? venueNames.get(block.venueId) : undefined}
+              staffNames={showDetail ? block.staffIds.map((id) => staffNames.get(id) ?? id) : []}
               onSelect={onSelect}
             />
           )

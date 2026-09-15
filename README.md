@@ -49,16 +49,47 @@ sessions with nobody qualified assigned.
 | Too little time to pack down and set up between sessions | Check |
 | A group with a long unscheduled gap | Note |
 
-**Two views**
-- **School** — one school, one day, a column per group. The main editing surface.
+**Five sections**
+- **Plan** — one school, one day, a column per group. The main editing surface.
 - **Whole site** — every school on site that day, side by side. The same picture
-  as the current *Holistic* sheet, but clashes between schools are flagged.
+  as the current *Holistic* sheet, but clashes between schools are flagged, and
+  you can drag a session straight from one school to another.
+- **Staff** — who's trained on what, editable. See below.
+- **Activities** — the catalogue: durations, set-up/pack-down, venue, capacity,
+  staff needed, clash rules.
+- **Venues** — the spaces activities run in.
+
+The week bar under the toolbar moves between weeks and days. A program holds as
+many weeks as you like; each day shows how many schools are on site.
 
 **Getting work out**
-- **Print** (<kbd>Ctrl</kbd>+<kbd>P</kbd>) — one page per school, laid out like
-  the current handout, with the activity colours carried across.
+- **Print** (<kbd>Ctrl</kbd>+<kbd>P</kbd>) — choose the scope (one school's whole
+  stay, everyone on site for a day, or everyone from today on), then one page
+  per school laid out like the current handout, with the activity colours
+  carried across and a colour key at the end. Print in **landscape** with
+  **background graphics** on.
 - **Export CSV** — one row per session, pastes straight back into Excel.
 - **Save to file / Open** — JSON, for sharing a plan or keeping a backup.
+
+## Editing the catalogue
+
+Activities, venues and staff training all started life in the source workbooks,
+but everything is editable in the app — you don't need to touch the code.
+
+- **Activities** → add, edit or remove. Colour, how long it runs, set-up and
+  pack-down, venue, capacity, staff needed, how it's delivered, and which
+  activities it must not run alongside. Changes feed straight into the palette
+  and the scheduling checks.
+- **Venues** → add or edit spaces. Venue clash detection picks them up at once.
+- **Staff** → *By person* lists every activity with a level you can set in one
+  click; *Full matrix* is the dense grid from the training workbook, with the
+  same colours, where clicking a cell steps through the levels.
+
+Edits are stored as an **overlay** on the shipped data, not a copy of it. So
+re-running the workbook import later refreshes everything you haven't
+overridden, and a cell you've changed by hand is marked with a dot so the two
+are easy to tell apart. Removing a seeded record hides it rather than destroying
+it — **Restore removed** on the Activities page brings them back.
 
 ## Where the data lives
 
@@ -99,6 +130,7 @@ src/
     venues.ts              venues and accommodation
     staff.generated.ts     staff competency, generated from the training workbook
     staff.ts               expands the generated data
+    resolve.ts             merges the seed catalogues with in-app edits
     templates.ts           day templates
     seed.ts                the sample week
   lib/
@@ -114,7 +146,10 @@ src/
     persist.ts             localStorage with schema migration
   hooks/
     useDragController.ts   the pointer handlers behind every drag
-  components/              UI
+  components/
+    pages/                 Staff, Activities and Venues management
+    schedule/ week/        the grid, in both views
+    panels/ print/ ui/     inspector, print sheet, shared primitives
 scripts/
   generate-staff.py        regenerates staff data from the .xlsx
 ```

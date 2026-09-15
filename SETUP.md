@@ -168,6 +168,10 @@ you're happy.
 
 ### Adding or editing an activity
 
+**Do this in the app** — the **Activities** page covers everything below, and
+changes are saved with the program. The notes here are only for changing the
+data that ships with the app, so every new program starts with it.
+
 Edit `src/data/activities.ts`. Each entry looks like:
 
 ```ts
@@ -194,8 +198,8 @@ both ways.
 
 ### Adding a venue
 
-Add it to `src/data/venues.ts`, then reference its `id` from the activity. Venue
-clash detection starts working immediately.
+Use the **Venues** page. To change the shipped list, add it to
+`src/data/venues.ts` and reference its `id` from the activity.
 
 ### Changing the standard day times
 

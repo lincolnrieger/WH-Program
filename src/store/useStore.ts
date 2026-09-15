@@ -1,8 +1,13 @@
 import { create } from 'zustand'
 import type {
-  Activity, Block, Booking, Delivery, Group, ProgramDocument, Site, Venue,
+  Activity, Block, Booking, CompetencyLevel, Delivery, Group, Overrides,
+  ProgramDocument, Site, StaffMember, Venue,
 } from '@/types'
-import { DOCUMENT_VERSION } from '@/types'
+import { DOCUMENT_VERSION, EMPTY_OVERRIDES } from '@/types'
+import {
+  competencyKey, overridesOf, resolveActivities, resolveActivityMap, resolveStaffMap,
+  resolveVenueMap,
+} from '@/data/resolve'
 import { SEED_ACTIVITIES } from '@/data/activities'
 import { SEED_VENUES } from '@/data/venues'
 import { SEED_STAFF } from '@/data/staff'
@@ -18,7 +23,11 @@ import {
 
 const HISTORY_LIMIT = 60
 
-export type ViewMode = 'booking' | 'week'
+/** Top-level destinations in the app. */
+export type Page = 'plan' | 'site' | 'staff' | 'activities' | 'venues'
+
+/** Pages that show the schedule grid and therefore need the week/day bar. */
+export const SCHEDULE_PAGES: Page[] = ['plan', 'site']
 
 export interface Selection {
   blockIds: string[]
@@ -33,7 +42,7 @@ interface State {
   past: ProgramDocument[]
   future: ProgramDocument[]
 
-  view: ViewMode
+  page: Page
   activeBookingId: string | null
   activeDate: string | null
   selection: Selection
@@ -79,12 +88,28 @@ interface State {
   copyDay: (bookingId: string, fromDate: string, toDate: string) => void
   clearDay: (bookingId: string, date: string) => void
 
-  // ── custom activities ──
-  upsertCustomActivity: (activity: Activity) => void
-  removeCustomActivity: (id: string) => void
+  // ── catalogue editing ──
+  saveActivity: (activity: Activity) => void
+  deleteActivity: (id: string) => void
+  restoreHiddenActivities: () => void
+
+  saveVenue: (venue: Venue) => void
+  deleteVenue: (id: string) => void
+
+  saveStaff: (person: StaffMember) => void
+  deleteStaff: (id: string) => void
+  setCompetency: (
+    staffId: string,
+    site: Site,
+    activityId: string,
+    level: CompetencyLevel | null,
+  ) => void
+  setCompetencyBulk: (
+    edits: { staffId: string; site: Site; activityId: string; level: CompetencyLevel }[],
+  ) => void
 
   // ── ui ──
-  setView: (view: ViewMode) => void
+  setPage: (page: Page) => void
   setActiveBooking: (id: string | null) => void
   setActiveDate: (date: string | null) => void
   select: (blockIds: string[], additive?: boolean) => void
@@ -120,7 +145,7 @@ export const useStore = create<State>((set, get) => {
     past: [],
     future: [],
 
-    view: 'booking',
+    page: 'plan',
     activeBookingId: initialDoc.bookings[0]?.id ?? null,
     activeDate: initialDoc.bookings[0]?.startDate ?? null,
     selection: { blockIds: [] },
@@ -147,6 +172,9 @@ export const useStore = create<State>((set, get) => {
         bookings: [],
         blocks: [],
         customActivities: [],
+        customVenues: [],
+        customStaff: [],
+        overrides: structuredClone(EMPTY_OVERRIDES),
         updatedAt: new Date().toISOString(),
       }
       saveDocument(doc)
@@ -206,7 +234,7 @@ export const useStore = create<State>((set, get) => {
         ...partial,
       }
       commit((doc) => ({ ...doc, bookings: [...doc.bookings, booking] }))
-      set({ activeBookingId: id, activeDate: booking.startDate, view: 'booking' })
+      set({ activeBookingId: id, activeDate: booking.startDate, page: 'plan' })
       return id
     },
 
@@ -381,23 +409,145 @@ export const useStore = create<State>((set, get) => {
         blocks: doc.blocks.filter((b) => !(b.bookingId === bookingId && b.date === date)),
       })),
 
-    upsertCustomActivity: (activity) =>
-      commit((doc) => ({
-        ...doc,
-        customActivities: doc.customActivities.some((a) => a.id === activity.id)
-          ? doc.customActivities.map((a) => (a.id === activity.id ? activity : a))
-          : [...doc.customActivities, activity],
-      })),
+    saveActivity: (activity) =>
+      commit((doc) => {
+        // An activity the user added lives in the document outright; one that
+        // came from the seed catalogue is stored as a patch, so a later data
+        // refresh still reaches the fields they haven't touched.
+        if (isCustom(doc.customActivities, activity.id)) {
+          return {
+            ...doc,
+            customActivities: doc.customActivities.map((a) =>
+              a.id === activity.id ? activity : a,
+            ),
+          }
+        }
+        if (!SEED_ACTIVITY_IDS.has(activity.id)) {
+          return { ...doc, customActivities: [...doc.customActivities, activity] }
+        }
+        return withOverrides(doc, (o) => ({
+          ...o,
+          activities: { ...o.activities, [activity.id]: activity },
+        }))
+      }),
 
-    removeCustomActivity: (id) =>
-      commit((doc) => ({
-        ...doc,
-        customActivities: doc.customActivities.filter((a) => a.id !== id),
-      })),
+    deleteActivity: (id) =>
+      commit((doc) => {
+        if (isCustom(doc.customActivities, id)) {
+          return { ...doc, customActivities: doc.customActivities.filter((a) => a.id !== id) }
+        }
+        return withOverrides(doc, (o) => ({
+          ...o,
+          hiddenActivityIds: [...new Set([...o.hiddenActivityIds, id])],
+        }))
+      }),
 
-    setView: (view) => {
-      if (view !== 'booking') {
-        set({ view })
+    restoreHiddenActivities: () =>
+      commit((doc) => withOverrides(doc, (o) => ({ ...o, hiddenActivityIds: [] }))),
+
+    saveVenue: (venue) =>
+      commit((doc) => {
+        if (isCustom(doc.customVenues, venue.id)) {
+          return {
+            ...doc,
+            customVenues: doc.customVenues.map((v) => (v.id === venue.id ? venue : v)),
+          }
+        }
+        if (!SEED_VENUE_IDS.has(venue.id)) {
+          return { ...doc, customVenues: [...doc.customVenues, venue] }
+        }
+        return withOverrides(doc, (o) => ({ ...o, venues: { ...o.venues, [venue.id]: venue } }))
+      }),
+
+    deleteVenue: (id) =>
+      commit((doc) => {
+        const stripped = {
+          ...doc,
+          // A venue that's gone can't stay attached to blocks.
+          blocks: doc.blocks.map((b) => (b.venueId === id ? { ...b, venueId: undefined } : b)),
+        }
+        if (isCustom(doc.customVenues, id)) {
+          return { ...stripped, customVenues: doc.customVenues.filter((v) => v.id !== id) }
+        }
+        return withOverrides(stripped, (o) => ({
+          ...o,
+          hiddenVenueIds: [...new Set([...o.hiddenVenueIds, id])],
+        }))
+      }),
+
+    saveStaff: (person) =>
+      commit((doc) => {
+        if (isCustom(doc.customStaff, person.id)) {
+          return {
+            ...doc,
+            customStaff: doc.customStaff.map((p) => (p.id === person.id ? person : p)),
+          }
+        }
+        if (!SEED_STAFF_IDS.has(person.id)) {
+          return { ...doc, customStaff: [...doc.customStaff, person] }
+        }
+        return withOverrides(doc, (o) => ({
+          ...o,
+          staff: {
+            ...o.staff,
+            [person.id]: { ...o.staff[person.id], name: person.name, sites: person.sites },
+          },
+        }))
+      }),
+
+    deleteStaff: (id) =>
+      commit((doc) => {
+        const stripped = {
+          ...doc,
+          blocks: doc.blocks.map((b) =>
+            b.staffIds.includes(id)
+              ? { ...b, staffIds: b.staffIds.filter((s) => s !== id) }
+              : b,
+          ),
+        }
+        if (isCustom(doc.customStaff, id)) {
+          return { ...stripped, customStaff: doc.customStaff.filter((p) => p.id !== id) }
+        }
+        return withOverrides(stripped, (o) => ({
+          ...o,
+          hiddenStaffIds: [...new Set([...o.hiddenStaffIds, id])],
+        }))
+      }),
+
+    setCompetency: (staffId, site, activityId, level) =>
+      commit((doc) =>
+        withOverrides(doc, (o) => {
+          const key = competencyKey(site, activityId)
+          const existing = o.staff[staffId]?.competency ?? {}
+          const competency = { ...existing }
+          // null clears the edit and falls back to whatever the workbook says.
+          if (level === null) delete competency[key]
+          else competency[key] = level
+          return {
+            ...o,
+            staff: { ...o.staff, [staffId]: { ...o.staff[staffId], competency } },
+          }
+        }),
+      ),
+
+    setCompetencyBulk: (edits) =>
+      commit((doc) =>
+        withOverrides(doc, (o) => {
+          const staff = { ...o.staff }
+          for (const edit of edits) {
+            const key = competencyKey(edit.site, edit.activityId)
+            staff[edit.staffId] = {
+              ...staff[edit.staffId],
+              competency: { ...staff[edit.staffId]?.competency, [key]: edit.level },
+            }
+          }
+          return { ...o, staff }
+        }),
+      ),
+
+    setPage: (page) => {
+      if (page !== 'plan') {
+        set({ page })
         return
       }
       // Coming back from the whole-site view, the chosen day may be one the
@@ -407,7 +557,7 @@ export const useStore = create<State>((set, get) => {
       const current = doc.bookings.find((b) => b.id === activeBookingId)
 
       if (!activeDate || (current && activeDate >= current.startDate && activeDate <= current.endDate)) {
-        set({ view })
+        set({ page })
         return
       }
 
@@ -415,11 +565,11 @@ export const useStore = create<State>((set, get) => {
         (b) => b.site === doc.site && activeDate >= b.startDate && activeDate <= b.endDate,
       )
       if (onThatDay) {
-        set({ view, activeBookingId: onThatDay.id, selection: { blockIds: [] } })
+        set({ page, activeBookingId: onThatDay.id, selection: { blockIds: [] } })
         return
       }
 
-      set({ view, activeDate: current ? current.startDate : activeDate })
+      set({ page, activeDate: current ? current.startDate : activeDate })
     },
     setActiveBooking: (id) => {
       const booking = get().doc.bookings.find((b) => b.id === id)
@@ -453,6 +603,22 @@ export const useStore = create<State>((set, get) => {
   }
 })
 
+function isCustom<T extends { id: string }>(items: T[] | undefined, id: string): boolean {
+  return (items ?? []).some((item) => item.id === id)
+}
+
+/** Applies a change to the document's override block, filling in a default. */
+function withOverrides(
+  doc: ProgramDocument,
+  mutate: (overrides: Overrides) => Overrides,
+): ProgramDocument {
+  return { ...doc, overrides: mutate(overridesOf(doc)) }
+}
+
+const SEED_ACTIVITY_IDS = new Set(SEED_ACTIVITIES.map((a) => a.id))
+const SEED_VENUE_IDS = new Set(SEED_VENUES.map((v) => v.id))
+const SEED_STAFF_IDS = new Set(SEED_STAFF.map((p) => p.id))
+
 function clampDateToBooking(date: string | null, booking: Booking): string {
   const dates = dateRange(booking.startDate, booking.endDate)
   return date && dates.includes(date) ? date : booking.startDate
@@ -461,28 +627,21 @@ function clampDateToBooking(date: string | null, booking: Booking): string {
 // ─── derived selectors ──────────────────────────────────────────────────────
 
 export function allActivitiesMap(doc: ProgramDocument): Map<string, Activity> {
-  const map = new Map<string, Activity>()
-  for (const activity of SEED_ACTIVITIES) map.set(activity.id, activity)
-  for (const activity of doc.customActivities) map.set(activity.id, activity)
-  return map
+  return resolveActivityMap(doc)
 }
 
 export function activitiesForSite(doc: ProgramDocument, site: Site): Activity[] {
-  return [...allActivitiesMap(doc).values()]
-    .filter((a) => a.sites.includes(site))
-    .sort((a, b) => a.name.localeCompare(b.name))
+  return resolveActivities(doc).filter((a) => a.sites.includes(site))
 }
-
-export const VENUE_MAP = new Map<string, Venue>(SEED_VENUES.map((v) => [v.id, v]))
-export const STAFF_MAP = new Map(SEED_STAFF.map((s) => [s.id, s]))
 
 export function buildConflictContext(doc: ProgramDocument): ConflictContext {
   return {
     blocks: doc.blocks,
     bookings: doc.bookings,
-    activities: allActivitiesMap(doc),
-    venues: VENUE_MAP,
-    staff: STAFF_MAP,
+    activities: resolveActivityMap(doc),
+    venues: resolveVenueMap(doc),
+    staff: resolveStaffMap(doc),
+    overrides: overridesOf(doc),
   }
 }
 

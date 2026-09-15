@@ -1,5 +1,5 @@
 import type { Booking, ProgramDocument } from '@/types'
-import { DOCUMENT_VERSION } from '@/types'
+import { DOCUMENT_VERSION, EMPTY_OVERRIDES } from '@/types'
 import { uid } from '@/lib/id'
 import { addDays, startOfWeek, toISODate } from '@/lib/time'
 import { instantiateTemplate, DAY_TEMPLATES } from './templates'
@@ -106,6 +106,9 @@ export function createSeedDocument(): ProgramDocument {
     bookings,
     blocks: [...blocks, ...afternoon],
     customActivities: [],
+    customVenues: [],
+    customStaff: [],
+    overrides: structuredClone(EMPTY_OVERRIDES),
     updatedAt: new Date().toISOString(),
   }
 }

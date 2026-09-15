@@ -1,7 +1,8 @@
 import type {
-  Activity, Block, Booking, CompetencyEntry, CompetencyLevel, Issue, Site, StaffMember, Venue,
+  Activity, Block, Booking, CompetencyLevel, Issue, Overrides, Site, StaffMember, Venue,
 } from '@/types'
-import { QUALIFIED_LEVELS } from '@/types'
+import { COMPETENCY_LABELS, QUALIFIED_LEVELS } from '@/types'
+import { competencyFor } from '@/data/resolve'
 import { formatRange, overlapMinutes, rangesOverlap } from './time'
 
 export interface ConflictContext {
@@ -10,6 +11,8 @@ export interface ConflictContext {
   activities: Map<string, Activity>
   venues: Map<string, Venue>
   staff: Map<string, StaffMember>
+  /** In-app edits, so competency checks see what the Staff page shows. */
+  overrides: Overrides
 }
 
 interface Named {
@@ -216,12 +219,13 @@ function checkStaffQualifications(date: string, items: Named[], ctx: ConflictCon
       const person = ctx.staff.get(staffId)
       if (!person) continue
 
-      const entry = competencyFor(person, item.activity, site)
-      if (entry && QUALIFIED_LEVELS.includes(entry.level)) continue
+      const entry = competencyFor(person, item.activity, site, ctx.overrides)
+      if (QUALIFIED_LEVELS.includes(entry.level)) continue
 
-      const detail = entry
-        ? `is marked “${entry.level.replace(/_/g, ' ')}”`
-        : 'has no training recorded'
+      const detail =
+        entry.level === 'unknown'
+          ? 'has no training recorded'
+          : `is marked “${COMPETENCY_LABELS[entry.level].toLowerCase()}”`
       out.push({
         id: `unqualified:${item.block.id}:${staffId}`,
         severity: 'warning',
@@ -367,47 +371,6 @@ function checkCoverage(ctx: ConflictContext, byDate: Map<string, Named[]>, out: 
   }
 }
 
-function normalise(name: string): string {
-  return name.toLowerCase().replace(/[^a-z0-9]/g, '')
-}
-
-/**
- * Finds a person's sign-off for an activity at a site.
- *
- * The training workbook and the activity catalogue don't use identical wording —
- * "Laser Skirmish LIC" and "Laser Skirmish 2nd" are both sign-offs for the one
- * scheduled Laser Skirmish, and several activities are written with a suffix
- * ("Orienteering (45min)"). `trainingNames` carries those aliases, and the best
- * (highest) level found across them wins.
- */
-function competencyFor(
-  person: StaffMember,
-  activity: Activity,
-  site: Site,
-): CompetencyEntry | undefined {
-  const wanted = new Set(
-    [activity.name, ...(activity.trainingNames ?? [])].map(normalise),
-  )
-  const matches = person.competency.filter(
-    (entry) => entry.site === site && wanted.has(normalise(entry.activityName)),
-  )
-  if (matches.length === 0) return undefined
-  return matches.reduce((best, entry) =>
-    LEVEL_RANK.indexOf(entry.level) < LEVEL_RANK.indexOf(best.level) ? entry : best,
-  )
-}
-
-/** Best to worst — used to pick the strongest sign-off across aliases. */
-const LEVEL_RANK: CompetencyLevel[] = [
-  'trainer',
-  'can_run',
-  'can_run_elsewhere',
-  'in_training',
-  'wants_to_learn',
-  'unknown',
-  'no',
-]
-
 /**
  * Staff who are free for a block and signed off on its activity.
  * Drives the "who can run this?" picker in the inspector.
@@ -416,7 +379,7 @@ export function availableStaff(
   block: Block,
   ctx: ConflictContext,
   site: Site,
-): { person: StaffMember; qualified: boolean; busy: boolean }[] {
+): { person: StaffMember; level: CompetencyLevel; qualified: boolean; busy: boolean }[] {
   const activity = block.activityId ? ctx.activities.get(block.activityId) : undefined
 
   const busyIds = new Set<string>()
@@ -429,9 +392,10 @@ export function availableStaff(
   return [...ctx.staff.values()]
     .filter((person) => person.sites.includes(site))
     .map((person) => {
-      const entry = activity ? competencyFor(person, activity, site) : undefined
+      const entry = activity ? competencyFor(person, activity, site, ctx.overrides) : undefined
       return {
         person,
+        level: entry?.level ?? 'unknown',
         qualified: entry ? QUALIFIED_LEVELS.includes(entry.level) : false,
         busy: busyIds.has(person.id),
       }

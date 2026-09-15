@@ -79,11 +79,13 @@ export function Inspector({ blocks, booking, activities, venues, site, issues, o
         <TimeFields blocks={blocks} onChange={(patch) => updateBlocks(ids, patch)} />
 
         {single && (
-          <Field label="Title">
-            <Input
+          <Field label="Title" hint="Line breaks are kept — useful for “Breakfast / Pack bags”.">
+            <textarea
               value={single.title ?? activity?.name ?? ''}
               placeholder={activity?.name ?? 'Block title'}
+              rows={2}
               onChange={(event) => updateBlock(single.id, { title: event.target.value || undefined })}
+              className="w-full resize-y rounded-md border border-[var(--line)] bg-[var(--surface)] px-2.5 py-1.5 text-[13px] text-[var(--ink)] placeholder:text-[var(--ink-faint)] focus:border-[var(--brand-soft)] focus:outline-none"
             />
           </Field>
         )}

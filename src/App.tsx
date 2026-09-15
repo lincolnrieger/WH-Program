@@ -1,17 +1,19 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import type { Booking, Issue } from '@/types'
-import { SEED_VENUES } from '@/data/venues'
-import { SEED_STAFF } from '@/data/staff'
+import { SITES } from '@/types'
 import { ROUTINES } from '@/data/activities'
 import { createSeedDocument } from '@/data/seed'
 import {
-  activitiesForSite, allActivitiesMap, computeIssues, useStore,
-} from '@/store/useStore'
+  resolveActivities, resolveActivityMap, resolveStaff, resolveStaffMap, resolveVenueMap,
+  resolveVenues,
+} from '@/data/resolve'
+import { computeIssues, useStore } from '@/store/useStore'
 import { useDragController } from '@/hooks/useDragController'
 import { useKeyboardShortcuts } from '@/hooks/useKeyboardShortcuts'
 import { exportCsv, exportJson, importJson } from '@/lib/exportImport'
 import { suggestSlots } from '@/lib/rotation'
 import { TopBar } from '@/components/layout/TopBar'
+import { WeekBar } from '@/components/layout/WeekBar'
 import { Sidebar } from '@/components/layout/Sidebar'
 import { BookingView } from '@/components/schedule/BookingView'
 import { WeekView } from '@/components/week/WeekView'
@@ -19,13 +21,19 @@ import { DragGhost } from '@/components/schedule/DragGhost'
 import { Inspector } from '@/components/panels/Inspector'
 import { RotationDialog } from '@/components/panels/RotationDialog'
 import { BookingDialog } from '@/components/panels/BookingDialog'
-import { PrintView } from '@/components/print/PrintView'
+import { StaffPage } from '@/components/pages/StaffPage'
+import { ActivitiesPage } from '@/components/pages/ActivitiesPage'
+import { VenuesPage } from '@/components/pages/VenuesPage'
+import {
+  DEFAULT_PRINT_OPTIONS, PrintView, type PrintOptions,
+} from '@/components/print/PrintView'
+import { PrintDialog } from '@/components/print/PrintDialog'
 import { Button, EmptyState } from '@/components/ui/primitives'
 
 export default function App() {
   const doc = useStore((s) => s.doc)
   const prefs = useStore((s) => s.prefs)
-  const view = useStore((s) => s.view)
+  const page = useStore((s) => s.page)
   const activeBookingId = useStore((s) => s.activeBookingId)
   const activeDate = useStore((s) => s.activeDate)
   const selection = useStore((s) => s.selection.blockIds)
@@ -36,17 +44,17 @@ export default function App() {
 
   const [rotationOpen, setRotationOpen] = useState(false)
   const [editingBooking, setEditingBooking] = useState<Booking | null>(null)
+  const [printOpen, setPrintOpen] = useState(false)
+  const [printOptions, setPrintOptions] = useState<PrintOptions>(DEFAULT_PRINT_OPTIONS)
   const [toast, setToast] = useState<string | null>(null)
 
   useDragController()
-  useKeyboardShortcuts({ onPrint: () => window.print() })
+  useKeyboardShortcuts({ onPrint: () => setPrintOpen(true) })
 
-  // Theme is applied to the root element so CSS variables cascade everywhere.
   useEffect(() => {
     document.documentElement.dataset.theme = prefs.theme
   }, [prefs.theme])
 
-  // Highlights are a transient "here's what just happened" cue.
   useEffect(() => {
     if (highlightIds.length === 0) return
     const timer = window.setTimeout(() => useStore.getState().setHighlight([]), 1200)
@@ -59,34 +67,54 @@ export default function App() {
     return () => window.clearTimeout(timer)
   }, [toast])
 
-  const activities = useMemo(() => allActivitiesMap(doc), [doc])
-  const paletteActivities = useMemo(() => activitiesForSite(doc, doc.site), [doc])
+  // Everything reads the catalogue through the resolver, so records edited on
+  // the Activities / Venues / Staff pages behave like the shipped ones.
+  const activities = useMemo(() => resolveActivityMap(doc), [doc])
+  const activityList = useMemo(() => resolveActivities(doc), [doc])
+  const venueList = useMemo(() => resolveVenues(doc), [doc])
+  const venueMap = useMemo(() => resolveVenueMap(doc), [doc])
+  const staffList = useMemo(() => resolveStaff(doc), [doc])
+  const staffMap = useMemo(() => resolveStaffMap(doc), [doc])
   const issues = useMemo(() => computeIssues(doc), [doc])
 
-  const venueNames = useMemo(
-    () => new Map(SEED_VENUES.map((v) => [v.id, v.name])),
-    [],
+  const paletteActivities = useMemo(
+    () => activityList.filter((a) => a.sites.includes(doc.site)),
+    [activityList, doc.site],
   )
-  const staffNames = useMemo(() => new Map(SEED_STAFF.map((s) => [s.id, s.name])), [])
-  const venueMap = useMemo(() => new Map(SEED_VENUES.map((v) => [v.id, v])), [])
-  const staffMap = useMemo(() => new Map(SEED_STAFF.map((s) => [s.id, s])), [])
+  const venueNames = useMemo(
+    () => new Map([...venueMap].map(([id, venue]) => [id, venue.name])),
+    [venueMap],
+  )
+  const staffNames = useMemo(
+    () => new Map([...staffMap].map(([id, person]) => [id, person.name])),
+    [staffMap],
+  )
 
   const siteBookings = useMemo(
     () => doc.bookings.filter((b) => b.site === doc.site),
     [doc.bookings, doc.site],
   )
-
   const booking = useMemo(
     () => doc.bookings.find((b) => b.id === activeBookingId),
     [doc.bookings, activeBookingId],
   )
-
   const selectedBlocks = useMemo(
     () => doc.blocks.filter((b) => selection.includes(b.id)),
     [doc.blocks, selection],
   )
 
   const date = activeDate ?? booking?.startDate ?? new Date().toISOString().slice(0, 10)
+
+  const errorDates = useMemo(() => {
+    const set = new Set<string>()
+    for (const issue of issues) if (issue.severity === 'error') set.add(issue.date)
+    return set
+  }, [issues])
+
+  const errorCount = useMemo(
+    () => issues.filter((i) => i.severity === 'error').length,
+    [issues],
+  )
 
   const handleSelect = useCallback((blockId: string, additive: boolean) => {
     useStore.getState().select([blockId], additive)
@@ -185,6 +213,18 @@ export default function App() {
     }
   }, [])
 
+  // What the print sheet will contain, given the chosen scope.
+  const printBookings = useMemo(() => {
+    if (printOptions.scope === 'booking') return booking ? [booking] : []
+    if (printOptions.scope === 'site-day') {
+      return siteBookings.filter((b) => date >= b.startDate && date <= b.endDate)
+    }
+    return siteBookings.filter((b) => b.endDate >= date)
+  }, [printOptions.scope, booking, siteBookings, date])
+
+  const showsGrid = page === 'plan' || page === 'site'
+  const siteName = SITES.find((s) => s.id === doc.site)?.short ?? 'Woodhouse'
+
   return (
     <div className="app-shell flex h-full flex-col overflow-hidden">
       <TopBar
@@ -192,14 +232,10 @@ export default function App() {
         onRename={(name) => useStore.getState().renameDocument(name)}
         site={doc.site}
         onSite={(site) => useStore.getState().setSite(site)}
-        view={view}
-        onView={(next) => useStore.getState().setView(next)}
-        zoom={prefs.zoom}
-        onZoom={(zoom) => useStore.getState().setPrefs({ zoom })}
-        snapMinutes={prefs.snapMinutes}
-        onSnap={(snapMinutes) => useStore.getState().setPrefs({ snapMinutes })}
-        theme={prefs.theme}
-        onTheme={(theme) => useStore.getState().setPrefs({ theme })}
+        page={page}
+        onPage={(next) => useStore.getState().setPage(next)}
+        prefs={prefs}
+        onPrefs={(patch) => useStore.getState().setPrefs(patch)}
         canUndo={canUndo}
         canRedo={canRedo}
         onUndo={() => useStore.getState().undo()}
@@ -207,44 +243,77 @@ export default function App() {
         onExportJson={() => exportJson(doc)}
         onExportCsv={() => exportCsv(doc, activities, venueMap, staffMap)}
         onImport={handleImport}
-        onPrint={() => window.print()}
+        onPrint={() => setPrintOpen(true)}
+        issueCount={errorCount}
         onNew={() => {
-          if (confirm('Start a new program? The current one stays in your browser until you replace it — export it first if you want a copy.')) {
+          if (
+            confirm(
+              'Start a new program? The current one stays in your browser until you replace it — export it first if you want a copy.',
+            )
+          ) {
             useStore.getState().newDocument(doc.site)
           }
         }}
       />
 
-      <div className="flex min-h-0 flex-1">
-        <Sidebar
-          activities={paletteActivities}
-          site={doc.site}
-          dark={prefs.theme === 'dark'}
-          search={search}
-          onSearch={(value) => useStore.getState().setSearch(value)}
-          onQuickAdd={quickAdd}
-          canAdd={Boolean(booking)}
+      {showsGrid && (
+        <WeekBar
           bookings={siteBookings}
-          activeBookingId={activeBookingId}
-          onSelectBooking={(id) => {
-            useStore.getState().setActiveBooking(id)
-            useStore.getState().setView('booking')
-          }}
-          onNewBooking={() => {
-            const id = useStore.getState().addBooking()
-            const created = useStore.getState().doc.bookings.find((b) => b.id === id)
-            if (created) setEditingBooking(created)
-          }}
-          onEditBooking={(id) => {
-            const found = doc.bookings.find((b) => b.id === id)
-            if (found) setEditingBooking(found)
-          }}
-          issues={issues}
-          onFocusIssue={focusIssue}
+          date={date}
+          onDateChange={(next) => useStore.getState().setActiveDate(next)}
+          errorDates={errorDates}
         />
+      )}
+
+      <div className="flex min-h-0 flex-1">
+        {showsGrid && (
+          <Sidebar
+            activities={paletteActivities}
+            site={doc.site}
+            dark={prefs.theme === 'dark'}
+            search={search}
+            onSearch={(value) => useStore.getState().setSearch(value)}
+            onQuickAdd={quickAdd}
+            canAdd={Boolean(booking)}
+            bookings={siteBookings}
+            activeBookingId={activeBookingId}
+            onSelectBooking={(id) => {
+              useStore.getState().setActiveBooking(id)
+              useStore.getState().setPage('plan')
+            }}
+            onNewBooking={() => {
+              const id = useStore.getState().addBooking({ startDate: date })
+              const created = useStore.getState().doc.bookings.find((b) => b.id === id)
+              if (created) setEditingBooking(created)
+            }}
+            onEditBooking={(id) => {
+              const found = doc.bookings.find((b) => b.id === id)
+              if (found) setEditingBooking(found)
+            }}
+            issues={issues}
+            onFocusIssue={focusIssue}
+          />
+        )}
 
         <main className="no-print flex min-w-0 flex-1">
-          {view === 'week' ? (
+          {page === 'staff' && (
+            <StaffPage site={doc.site} activities={activityList} staff={staffList} />
+          )}
+
+          {page === 'activities' && (
+            <ActivitiesPage
+              site={doc.site}
+              activities={activityList}
+              venues={venueList}
+              dark={prefs.theme === 'dark'}
+            />
+          )}
+
+          {page === 'venues' && (
+            <VenuesPage site={doc.site} venues={venueList} activities={activityList} />
+          )}
+
+          {page === 'site' && (
             <WeekView
               bookings={siteBookings}
               date={date}
@@ -260,12 +329,12 @@ export default function App() {
               zoom={prefs.zoom}
               dark={prefs.theme === 'dark'}
               showConflicts={prefs.showConflicts}
+              showDetail={prefs.showBlockDetail}
               onSelect={handleSelect}
               onClearSelection={handleClearSelection}
-              onDateChange={(next) => useStore.getState().setActiveDate(next)}
               onOpenBooking={(id) => {
                 useStore.getState().setActiveBooking(id)
-                useStore.getState().setView('booking')
+                useStore.getState().setPage('plan')
               }}
               onNewBooking={() => {
                 const id = useStore.getState().addBooking({ startDate: date })
@@ -273,83 +342,87 @@ export default function App() {
                 if (created) setEditingBooking(created)
               }}
             />
-          ) : booking ? (
-            <BookingView
-              booking={booking}
-              date={date}
-              blocks={doc.blocks}
-              activities={activities}
-              venueNames={venueNames}
-              staffNames={staffNames}
-              issues={issues}
-              selection={selection}
-              highlightIds={highlightIds}
-              dayStartMin={prefs.dayStartMin}
-              dayEndMin={prefs.dayEndMin}
-              zoom={prefs.zoom}
-              dark={prefs.theme === 'dark'}
-              showConflicts={prefs.showConflicts}
-              onSelect={handleSelect}
-              onClearSelection={handleClearSelection}
-              onDateChange={(next) => useStore.getState().setActiveDate(next)}
-              onApplyTemplate={(templateId) =>
-                useStore.getState().applyDayTemplate(templateId, booking.id, date)
-              }
-              onOpenRotation={() => setRotationOpen(true)}
-              onCopyDay={(from) => useStore.getState().copyDay(booking.id, from, date)}
-              onClearDay={() => {
-                if (confirm(`Clear everything scheduled for ${booking.schoolName} on this day?`)) {
-                  useStore.getState().clearDay(booking.id, date)
-                }
-              }}
-              onEditBooking={() => setEditingBooking(booking)}
-              onEmptyDoubleClick={(groupIndex, startMin) => {
-                const group = booking.groups[groupIndex]
-                if (!group) return
-                const id = useStore.getState().addBlock({
-                  bookingId: booking.id,
-                  date,
-                  startMin,
-                  endMin: startMin + 90,
-                  groupIds: [group.id],
-                  kind: 'custom',
-                  title: 'New block',
-                  delivery: 'staff',
-                  staffIds: [],
-                })
-                useStore.getState().select([id])
-              }}
-            />
-          ) : (
-            <EmptyState
-              title="No school selected"
-              body="Add a school to start building its itinerary, or load the sample week to see how it works."
-              action={
-                <div className="flex gap-2">
-                  <Button
-                    variant="primary"
-                    onClick={() => {
-                      const id = useStore.getState().addBooking()
-                      const created = useStore.getState().doc.bookings.find((b) => b.id === id)
-                      if (created) setEditingBooking(created)
-                    }}
-                  >
-                    Add a school
-                  </Button>
-                  <Button onClick={() => useStore.getState().setDoc(createSeedDocument())}>
-                    Load sample week
-                  </Button>
-                </div>
-              }
-            />
           )}
 
-          {selectedBlocks.length > 0 && (
+          {page === 'plan' &&
+            (booking ? (
+              <BookingView
+                booking={booking}
+                date={date}
+                blocks={doc.blocks}
+                activities={activities}
+                venueNames={venueNames}
+                staffNames={staffNames}
+                issues={issues}
+                selection={selection}
+                highlightIds={highlightIds}
+                dayStartMin={prefs.dayStartMin}
+                dayEndMin={prefs.dayEndMin}
+                zoom={prefs.zoom}
+                dark={prefs.theme === 'dark'}
+                showConflicts={prefs.showConflicts}
+                showDetail={prefs.showBlockDetail}
+                onSelect={handleSelect}
+                onClearSelection={handleClearSelection}
+                onDateChange={(next) => useStore.getState().setActiveDate(next)}
+                onApplyTemplate={(templateId) =>
+                  useStore.getState().applyDayTemplate(templateId, booking.id, date)
+                }
+                onOpenRotation={() => setRotationOpen(true)}
+                onCopyDay={(from) => useStore.getState().copyDay(booking.id, from, date)}
+                onClearDay={() => {
+                  if (confirm(`Clear everything scheduled for ${booking.schoolName} on this day?`)) {
+                    useStore.getState().clearDay(booking.id, date)
+                  }
+                }}
+                onEditBooking={() => setEditingBooking(booking)}
+                onEmptyDoubleClick={(groupIndex, startMin) => {
+                  const group = booking.groups[groupIndex]
+                  if (!group) return
+                  const id = useStore.getState().addBlock({
+                    bookingId: booking.id,
+                    date,
+                    startMin,
+                    endMin: startMin + 90,
+                    groupIds: [group.id],
+                    kind: 'custom',
+                    title: 'New block',
+                    delivery: 'staff',
+                    staffIds: [],
+                  })
+                  useStore.getState().select([id])
+                }}
+              />
+            ) : (
+              <EmptyState
+                title="No school selected"
+                body="Add a school to start building its itinerary, or load the sample week to see how it works."
+                action={
+                  <div className="flex gap-2">
+                    <Button
+                      variant="primary"
+                      onClick={() => {
+                        const id = useStore.getState().addBooking({ startDate: date })
+                        const created = useStore.getState().doc.bookings.find((b) => b.id === id)
+                        if (created) setEditingBooking(created)
+                      }}
+                    >
+                      Add a school
+                    </Button>
+                    <Button onClick={() => useStore.getState().setDoc(createSeedDocument())}>
+                      Load sample week
+                    </Button>
+                  </div>
+                }
+              />
+            ))}
+
+          {showsGrid && selectedBlocks.length > 0 && (
             <Inspector
               blocks={selectedBlocks}
               booking={doc.bookings.find((b) => b.id === selectedBlocks[0].bookingId)}
               activities={activities}
-              venues={SEED_VENUES}
+              venues={venueList}
               site={doc.site}
               issues={issues}
               onClose={handleClearSelection}
@@ -361,11 +434,36 @@ export default function App() {
       <DragGhost dark={prefs.theme === 'dark'} />
 
       <PrintView
-        bookings={view === 'week' ? siteBookings : booking ? [booking] : []}
+        bookings={printBookings}
         blocks={doc.blocks}
         activities={activities}
+        venues={venueMap}
+        staff={staffMap}
         programName={doc.name}
+        options={printOptions}
+        siteName={siteName}
+        date={date}
       />
+
+      {printOpen && (
+        <PrintDialog
+          options={printOptions}
+          onChange={(patch) => setPrintOptions((current) => ({ ...current, ...patch }))}
+          onPrint={() => {
+            setPrintOpen(false)
+            // Let the dialog unmount before the print sheet is captured.
+            window.setTimeout(() => window.print(), 60)
+          }}
+          onClose={() => setPrintOpen(false)}
+          bookingName={booking?.schoolName}
+          date={date}
+          counts={{
+            booking: booking ? 1 : 0,
+            siteDay: siteBookings.filter((b) => date >= b.startDate && date <= b.endDate).length,
+            siteWeek: siteBookings.filter((b) => b.endDate >= date).length,
+          }}
+        />
+      )}
 
       {rotationOpen && booking && (
         <RotationDialog

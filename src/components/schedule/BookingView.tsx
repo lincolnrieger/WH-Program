@@ -12,7 +12,7 @@ const HEADER_HEIGHT = 30
 /** The main editing surface: one school, one day, a column per group. */
 export function BookingView({
   booking, date, blocks, activities, venueNames, staffNames, issues,
-  selection, highlightIds, dayStartMin, dayEndMin, zoom, dark, showConflicts,
+  selection, highlightIds, dayStartMin, dayEndMin, zoom, dark, showConflicts, showDetail,
   onSelect, onClearSelection, onDateChange, onApplyTemplate, onOpenRotation,
   onCopyDay, onClearDay, onEditBooking, onEmptyDoubleClick,
 }: {
@@ -30,6 +30,7 @@ export function BookingView({
   zoom: number
   dark: boolean
   showConflicts: boolean
+  showDetail: boolean
   onSelect: (blockId: string, additive: boolean) => void
   onClearSelection: () => void
   onDateChange: (date: string) => void
@@ -193,6 +194,7 @@ export function BookingView({
             zoom={zoom}
             dark={dark}
             showConflicts={showConflicts}
+            showDetail={showDetail}
             onSelect={onSelect}
             onBackgroundClick={onClearSelection}
             onEmptyDoubleClick={onEmptyDoubleClick}

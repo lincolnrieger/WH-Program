@@ -126,6 +126,28 @@ export const COMPETENCY_COLOURS: Record<CompetencyLevel, string> = {
 /** Levels considered qualified to run a session unsupervised. */
 export const QUALIFIED_LEVELS: CompetencyLevel[] = ['trainer', 'can_run']
 
+/** Order used by the training matrix when cycling a cell through the levels. */
+export const COMPETENCY_CYCLE: CompetencyLevel[] = [
+  'unknown',
+  'wants_to_learn',
+  'in_training',
+  'can_run_elsewhere',
+  'can_run',
+  'trainer',
+  'no',
+]
+
+/** Single-character badge shown in the dense training matrix. */
+export const COMPETENCY_SHORT: Record<CompetencyLevel, string> = {
+  trainer: 'T',
+  can_run: 'R',
+  can_run_elsewhere: 'W',
+  in_training: 'P',
+  wants_to_learn: 'L',
+  no: '\u2013',
+  unknown: '',
+}
+
 export interface CompetencyEntry {
   /** Activity name as written in the training workbook (may not match an Activity id). */
   activityName: string
@@ -229,6 +251,48 @@ export interface Issue {
   bookingId?: string
 }
 
+/**
+ * Edits made in the app on top of the seed catalogues.
+ *
+ * The seed data (activities, venues, staff training) is generated from the
+ * source workbooks and shipped with the app. Rather than copying all of it into
+ * every saved document, we store only what's been changed — so a later refresh
+ * of the workbook data still flows through everywhere it hasn't been overridden.
+ */
+export interface Overrides {
+  /** Field-level edits to seed activities, keyed by activity id. */
+  activities: Record<string, Partial<Activity>>
+  /** Field-level edits to seed venues, keyed by venue id. */
+  venues: Record<string, Partial<Venue>>
+  /** Edits to seed staff, keyed by staff id. */
+  staff: Record<string, StaffOverride>
+  /** Seed records hidden from the app (never deleted, so they can come back). */
+  hiddenActivityIds: string[]
+  hiddenVenueIds: string[]
+  hiddenStaffIds: string[]
+}
+
+export interface StaffOverride {
+  name?: string
+  sites?: Site[]
+  /**
+   * Competency set in the app, keyed `${site}:${activityId}`. These win over
+   * whatever the training workbook says for the same activity.
+   */
+  competency?: Record<string, CompetencyLevel>
+  /** Free-text notes set in the app, same key shape as `competency`. */
+  notes?: Record<string, string>
+}
+
+export const EMPTY_OVERRIDES: Overrides = {
+  activities: {},
+  venues: {},
+  staff: {},
+  hiddenActivityIds: [],
+  hiddenVenueIds: [],
+  hiddenStaffIds: [],
+}
+
 /** Everything the app persists. */
 export interface ProgramDocument {
   version: number
@@ -237,9 +301,15 @@ export interface ProgramDocument {
   site: Site
   bookings: Booking[]
   blocks: Block[]
-  /** User-added activities, merged over the seed catalogue. */
+  /** Activities added in the app, merged over the seed catalogue. */
   customActivities: Activity[]
+  /** Venues added in the app. */
+  customVenues: Venue[]
+  /** Staff added in the app. */
+  customStaff: StaffMember[]
+  /** Edits to the seed data. */
+  overrides: Overrides
   updatedAt: string
 }
 
-export const DOCUMENT_VERSION = 3
+export const DOCUMENT_VERSION = 4

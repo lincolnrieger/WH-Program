@@ -72,6 +72,20 @@ People on both sheets are merged into one record with a per-site competency list
 so someone signed off for Survivor at Woodhouse but not at Roonka is handled
 correctly.
 
+### Editing it in the app
+
+The **Staff** page edits all of this without touching the workbook. Changes are
+stored as an overlay keyed by person, activity and site, so:
+
+- Re-running the import below refreshes everything you *haven't* changed.
+- A level set in the app is marked with a dot, so it's obvious which cells came
+  from the workbook and which were changed since.
+- Clicking a set level again clears the override and falls back to the workbook.
+
+The same applies to **Activities** and **Venues** — edits and additions live in
+the saved program, and removing a seeded record hides it rather than deleting
+it.
+
 ### Regenerating it
 
 After the workbook is updated:
@@ -116,8 +130,9 @@ Some workbook rows are deliberately not activities and have no catalogue entry �
 `Office`, `Chemical Shed`, `School Holidays`, `LIC`, `Birthday Parties`,
 `Team Building (adults)`. They're still in the data, just never scheduled.
 
-**If you add an activity whose workbook name differs**, add a `trainingNames`
-array to it, or nobody will show as qualified.
+**If you add an activity whose workbook name differs**, fill in *Also called (in
+the training workbook)* on the Activities page — otherwise nobody will show as
+qualified for it.
 
 ---
 
@@ -137,7 +152,7 @@ patterns.
   assigns staff per session rather than as a shift, and can show each person's
   span from that. Shift times themselves aren't modelled yet.
 - **Roonka-specific venues** are thinner than the Woodhouse list — the source
-  sheet doesn't name locations for Roonka activities. Add them to
-  `src/data/venues.ts` and clash detection will start covering them.
+  sheet doesn't name locations for Roonka activities. Add them on the **Venues**
+  page and clash detection will start covering them.
 - **Junior programs.** The Woodhouse training sheet ends with
   *"JUNIOR Programs - add please"*, so there was nothing to import.

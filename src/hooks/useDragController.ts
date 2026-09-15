@@ -118,6 +118,24 @@ export function useDragController(): void {
   }, [])
 }
 
+/**
+ * Consecutive group ids starting at `fromId`, at most `count` of them — used to
+ * keep a multi-group block's width when it moves to a school with a different
+ * number of groups.
+ */
+function takeGroupRun(
+  booking: { groups: { id: string }[] },
+  fromId: string | undefined,
+  count: number,
+): string[] {
+  if (booking.groups.length === 0) return []
+  const start = Math.max(
+    0,
+    booking.groups.findIndex((g) => g.id === fromId),
+  )
+  return booking.groups.slice(start, start + Math.max(count, 1)).map((g) => g.id)
+}
+
 /** Small escape hatch so block/palette components can seed the controller refs. */
 export const dragHandles: {
   setOrigin: (point: { x: number; y: number }) => void
@@ -147,6 +165,34 @@ function commit(
 
     if (mode === 'resize-start' || mode === 'resize-end') {
       store.updateBlock(block.id, { startMin: target.startMin, endMin: target.endMin })
+      return
+    }
+
+    // Dropped onto a different school in the whole-site view: the block moves
+    // across, and its groups have to be remapped because group ids belong to
+    // the booking. A block that covered every group covers every group of the
+    // new school; anything narrower lands on the column it was dropped on.
+    if (block.bookingId !== booking.id) {
+      const source = doc.bookings.find((b) => b.id === block.bookingId)
+      const coveredWholeSchool =
+        source !== undefined && block.groupIds.length >= source.groups.length
+
+      const nextGroupIds = coveredWholeSchool
+        ? booking.groups.map((g) => g.id)
+        : takeGroupRun(booking, targetGroupId, block.groupIds.length)
+
+      if (nextGroupIds.length === 0) return
+
+      store.updateBlock(block.id, {
+        bookingId: booking.id,
+        date: target.date,
+        startMin: target.startMin,
+        endMin: target.endMin,
+        groupIds: nextGroupIds,
+        // The venue may not exist at the other school's site.
+        venueId: booking.site === source?.site ? block.venueId : undefined,
+      })
+      store.select([block.id])
       return
     }
 
