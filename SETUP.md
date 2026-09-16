@@ -76,8 +76,8 @@ database_name = "wh-program"
 database_id = "a1b2c3d4-...."
 ```
 
-Copy that **`database_id`** into `wrangler.jsonc`, replacing
-`PASTE_YOUR_DATABASE_ID_HERE`:
+Open `wrangler.jsonc`. Near the middle there's a commented-out block — remove
+the `//` from those six lines and paste your **`database_id`** in:
 
 ```jsonc
 "d1_databases": [
@@ -86,8 +86,16 @@ Copy that **`database_id`** into `wrangler.jsonc`, replacing
     "database_name": "wh-program",
     "database_id": "a1b2c3d4-...."   // <- yours goes here
   }
-]
+],
 ```
+
+Keep the trailing comma. Check it's valid before you push:
+
+```bash
+npx wrangler deploy --dry-run
+```
+
+It should list `env.DB (wh-program)   D1 Database` among the bindings.
 
 Then create the tables:
 
@@ -105,6 +113,11 @@ git push
 
 > The id is not a secret — it only identifies the database, and reaching it
 > still needs your Cloudflare account. It belongs in the repository.
+
+> **Until you do this**, the site still builds, deploys and opens. It just has
+> nowhere to put anything, so it says *Nothing is saving* across the top, with
+> this step spelled out. That's deliberate: a deployment that can't save is
+> better than a deployment that won't build.
 
 ---
 
@@ -138,9 +151,10 @@ wired up. If the schools appear, and are still there when you open the same URL
 on your phone, everything is working.
 
 > **If the build fails**, open the build log in Cloudflare and read the last
-> ~20 lines — it will name the problem. The usual causes are that `npm run
-> build` also fails locally, or that `database_id` in `wrangler.jsonc` is still
-> the placeholder.
+> ~20 lines — it will name the problem. The usual cause is that `npm run build`
+> also fails locally, so run it locally first. If the build succeeds but the
+> *deploy* fails, it's almost always `wrangler.jsonc` — check
+> `npx wrangler deploy --dry-run` passes.
 
 ### Deploying by hand instead
 
@@ -359,10 +373,12 @@ fails, delete `node_modules` and `package-lock.json` and try again.
 **Cloudflare build fails but it works locally** — make sure `package-lock.json`
 is committed (`git status` should not list it as untracked).
 
-**The toolbar says "Can't save"** — hover it for the reason. *No database
-bound* means `database_id` in `wrangler.jsonc` is still the placeholder. *The
-database has no tables yet* means `npm run db:schema` hasn't been run against
-the live database.
+**A red bar says "Nothing is saving"** — it carries the reason. *No database
+bound* means the `d1_databases` block in `wrangler.jsonc` is still commented
+out, or the change hasn't been pushed and redeployed. *The database has no
+tables yet* means `npm run db:schema` hasn't been run against the live
+database. Everything you do meanwhile is held in your browser and will be sent
+once it's fixed.
 
 **The toolbar says "Offline"** — the app can't reach the API. Your changes are
 safe in this browser and will be sent as soon as it can; click the badge to try

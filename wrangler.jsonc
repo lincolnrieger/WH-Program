@@ -12,15 +12,25 @@
     "run_worker_first": ["/api/*"]
   },
 
-  // The shared plan. Create it once with `npx wrangler d1 create wh-program`
-  // and paste the id it prints in below — see SETUP.md.
-  "d1_databases": [
-    {
-      "binding": "DB",
-      "database_name": "wh-program",
-      "database_id": "PASTE_YOUR_DATABASE_ID_HERE"
-    }
-  ],
+  // ── The shared plan ───────────────────────────────────────────────────────
+  //
+  // Create the database once:
+  //
+  //     npx wrangler d1 create wh-program
+  //
+  // then uncomment the four lines below and paste in the `database_id` it
+  // printed. See SETUP.md step 4.
+  //
+  // Until you do, the site deploys and loads perfectly well — it just has
+  // nowhere to save, and says so.
+  //
+  // "d1_databases": [
+  //   {
+  //     "binding": "DB",
+  //     "database_name": "wh-program",
+  //     "database_id": "paste-the-id-here"
+  //   }
+  // ],
 
   "observability": { "enabled": true }
 }
