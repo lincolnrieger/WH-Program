@@ -159,7 +159,8 @@ There's still no login, so put Cloudflare Access in front of the site —
 API as well as the pages.
 
 [SETUP.md](SETUP.md#the-database) has the schema, how to query it and how to
-take a backup.
+take a backup — worth doing before **Program → Start fresh**, which empties the
+plan for everyone.
 
 ## Running it locally
 
