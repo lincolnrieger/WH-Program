@@ -1,6 +1,6 @@
 import { useState } from 'react'
-import type { Activity, ActivityCategory, Delivery, Site, Venue } from '@/types'
-import { CATEGORY_LABELS, DELIVERY_LABELS } from '@/types'
+import type { Activity, Delivery, Site, Venue } from '@/types'
+import { DELIVERY_LABELS } from '@/types'
 import { blockPalette } from '@/lib/colour'
 import { Modal } from '@/components/ui/Modal'
 import { Button, Chip, Field, Input, Select, cx } from '@/components/ui/primitives'
@@ -129,42 +129,28 @@ export function ActivityDialog({
           </Field>
         </div>
 
-        <div className="grid grid-cols-2 gap-2">
-          <Field label="Category">
-            <Select
-              value={draft.category}
-              onChange={(e) => set('category', e.target.value as ActivityCategory)}
-            >
-              {(Object.keys(CATEGORY_LABELS) as ActivityCategory[]).map((key) => (
-                <option key={key} value={key}>
-                  {CATEGORY_LABELS[key]}
-                </option>
-              ))}
-            </Select>
-          </Field>
-          <Field label="Runs at">
-            <div className="flex h-8 items-center gap-3">
-              {(['woodhouse', 'roonka'] as Site[]).map((value) => (
-                <label key={value} className="flex items-center gap-1.5 text-[12.5px]">
-                  <input
-                    type="checkbox"
-                    checked={draft.sites.includes(value)}
-                    onChange={(e) =>
-                      set(
-                        'sites',
-                        e.target.checked
-                          ? [...draft.sites, value]
-                          : draft.sites.filter((s) => s !== value),
-                      )
-                    }
-                    className="h-3.5 w-3.5 accent-[var(--brand)]"
-                  />
-                  {value === 'woodhouse' ? 'Woodhouse' : 'Roonka'}
-                </label>
-              ))}
-            </div>
-          </Field>
-        </div>
+        <Field label="Runs at">
+          <div className="flex h-8 items-center gap-3">
+            {(['woodhouse', 'roonka'] as Site[]).map((value) => (
+              <label key={value} className="flex items-center gap-1.5 text-[12.5px]">
+                <input
+                  type="checkbox"
+                  checked={draft.sites.includes(value)}
+                  onChange={(e) =>
+                    set(
+                      'sites',
+                      e.target.checked
+                        ? [...draft.sites, value]
+                        : draft.sites.filter((s) => s !== value),
+                    )
+                  }
+                  className="h-3.5 w-3.5 accent-[var(--brand)]"
+                />
+                {value === 'woodhouse' ? 'Woodhouse' : 'Roonka'}
+              </label>
+            ))}
+          </div>
+        </Field>
 
         <div className="grid grid-cols-3 gap-2">
           <Field label="Runs for (min)">

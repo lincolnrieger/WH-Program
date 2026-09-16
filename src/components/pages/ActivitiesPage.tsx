@@ -1,6 +1,6 @@
 import { useMemo, useState } from 'react'
-import type { Activity, ActivityCategory, Site, Venue } from '@/types'
-import { CATEGORY_LABELS, DELIVERY_LABELS } from '@/types'
+import type { Activity, Site, Venue } from '@/types'
+import { DELIVERY_LABELS } from '@/types'
 import { SEED_ACTIVITIES } from '@/data/activities'
 import { overridesOf } from '@/data/resolve'
 import { blockPalette } from '@/lib/colour'
@@ -30,7 +30,6 @@ export function ActivitiesPage({
   const restoreHidden = useStore((s) => s.restoreHiddenActivities)
 
   const [search, setSearch] = useState('')
-  const [category, setCategory] = useState<ActivityCategory | 'all'>('all')
   const [allSites, setAllSites] = useState(false)
   const [editing, setEditing] = useState<Activity | null>(null)
 
@@ -41,21 +40,19 @@ export function ActivitiesPage({
     const query = search.trim().toLowerCase()
     return activities.filter((activity) => {
       if (!allSites && !activity.sites.includes(site)) return false
-      if (category !== 'all' && activity.category !== category) return false
       if (!query) return true
       return (
         activity.name.toLowerCase().includes(query) ||
         (activity.notes?.toLowerCase().includes(query) ?? false)
       )
     })
-  }, [activities, site, allSites, category, search])
+  }, [activities, site, allSites, search])
 
   function addActivity() {
     setEditing({
       id: uid('act'),
       name: '',
       sites: [site],
-      category: 'adventure',
       colour: '#4472c4',
       defaultDurationMin: 90,
       setupMin: 10,
@@ -96,16 +93,6 @@ export function ActivitiesPage({
           aria-label="Search activities"
           className="w-56"
         />
-        <div className="flex flex-wrap gap-1">
-          <Pill active={category === 'all'} onClick={() => setCategory('all')}>
-            All
-          </Pill>
-          {(Object.keys(CATEGORY_LABELS) as ActivityCategory[]).map((key) => (
-            <Pill key={key} active={category === key} onClick={() => setCategory(key)}>
-              {CATEGORY_LABELS[key]}
-            </Pill>
-          ))}
-        </div>
         <label className="ml-auto flex items-center gap-1.5 text-[11.5px] text-[var(--ink-soft)]">
           <input
             type="checkbox"
@@ -121,7 +108,7 @@ export function ActivitiesPage({
         {visible.length === 0 ? (
           <EmptyState
             title="No activities match"
-            body="Try a different search or category, or add a new activity."
+            body="Try a different search, or add a new activity."
             action={
               <Button variant="primary" onClick={addActivity}>
                 + Activity
@@ -133,7 +120,6 @@ export function ActivitiesPage({
             <thead className="sticky top-0 z-10 bg-[var(--surface)]">
               <tr className="border-b border-[var(--line)] text-left text-[11px] text-[var(--ink-faint)]">
                 <Th className="pl-3">Activity</Th>
-                <Th>Category</Th>
                 <Th className="text-right">Runs</Th>
                 <Th className="text-right">Set-up</Th>
                 <Th className="text-right">Pack-down</Th>
@@ -168,7 +154,6 @@ export function ActivitiesPage({
                         {activity.exclusive && <Tag title="Only one group at a time">exclusive</Tag>}
                       </span>
                     </td>
-                    <td className="text-[var(--ink-soft)]">{CATEGORY_LABELS[activity.category]}</td>
                     <td className="tnum text-right text-[var(--ink-soft)]">
                       {formatDuration(activity.defaultDurationMin)}
                     </td>
@@ -233,27 +218,3 @@ function Tag({ children, title }: { children: React.ReactNode; title?: string })
   )
 }
 
-function Pill({
-  children,
-  active,
-  onClick,
-}: {
-  children: React.ReactNode
-  active: boolean
-  onClick: () => void
-}) {
-  return (
-    <button
-      type="button"
-      onClick={onClick}
-      className={cx(
-        'rounded-full border px-2 py-0.5 text-[11px] font-medium transition-colors',
-        active
-          ? 'border-[var(--brand)] bg-[var(--brand)] text-[var(--brand-ink)]'
-          : 'border-[var(--line)] bg-[var(--surface)] text-[var(--ink-soft)] hover:bg-[var(--surface-sunk)]',
-      )}
-    >
-      {children}
-    </button>
-  )
-}

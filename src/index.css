@@ -102,6 +102,19 @@ body {
   overscroll-behavior: none;
 }
 
+/* Number inputs here are small, labelled boxes — the browser's spin buttons
+   crowd them and read as a stray control sitting next to the field. */
+input[type='number'] {
+  -moz-appearance: textfield;
+  appearance: textfield;
+}
+
+input[type='number']::-webkit-outer-spin-button,
+input[type='number']::-webkit-inner-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
+}
+
 /* Times and durations line up in columns when the digits are tabular. */
 .tnum {
   font-variant-numeric: tabular-nums;
@@ -168,6 +181,34 @@ body.is-dragging * {
 
 /* ─── Print ──────────────────────────────────────────────────────────────── */
 
+/*
+ * The print sheet is laid out at all times, parked off-screen, rather than
+ * hidden with `display: none`. It has to have a real size for the fit-to-page
+ * measurement to work — a hidden element measures zero — and parking it is the
+ * only way to have both that and an invisible sheet on screen.
+ */
+.print-only {
+  position: fixed;
+  top: 0;
+  left: -20000px;
+  width: 1047px;
+  pointer-events: none;
+  z-index: -1;
+}
+
+/* One A4 landscape page at 96dpi, less a 10mm margin all round. */
+.print-sheet {
+  width: 1047px;
+  height: 718px;
+  overflow: hidden;
+  background: #ffffff;
+  color: #000000;
+}
+
+.print-sheet + .print-sheet {
+  break-before: page;
+}
+
 @media print {
   @page {
     size: A4 landscape;
@@ -194,6 +235,14 @@ body.is-dragging * {
     overflow: visible !important;
   }
 
+  .print-only {
+    position: static;
+    left: auto;
+    width: auto;
+    z-index: auto;
+    display: block !important;
+  }
+
   /* Even column widths, so a printed day reads like the spreadsheet it replaces. */
   .print-only table {
     table-layout: fixed;
@@ -203,23 +252,13 @@ body.is-dragging * {
     display: none !important;
   }
 
-  .print-only {
-    display: block !important;
-  }
-
-  .print-page {
-    break-after: page;
-  }
-
-  .print-page:last-child {
-    break-after: auto;
-  }
-
   .print-keep {
     break-inside: avoid;
   }
-}
 
-.print-only {
-  display: none;
+  /* Activity colours are the whole point of the printed sheet. */
+  .print-only * {
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+  }
 }

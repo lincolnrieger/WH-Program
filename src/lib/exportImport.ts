@@ -36,6 +36,21 @@ export async function importJson(file: File): Promise<ProgramDocument> {
   return parsed as ProgramDocument
 }
 
+/**
+ * A staff member's name as it should read anywhere the roster is shown.
+ *
+ * Someone on a session to be trained rather than to run it gets a trailing
+ * `#` — the convention the paper run sheets already use.
+ */
+export function staffLabel(block: Block, staffId: string, name: string): string {
+  return block.trainingStaffIds?.includes(staffId) ? `${name} #` : name
+}
+
+/** Names of everyone rostered on a block, trainees marked with `#`. */
+export function staffLabels(block: Block, names: Map<string, { name: string }>): string[] {
+  return block.staffIds.map((id) => staffLabel(block, id, names.get(id)?.name ?? id))
+}
+
 /** Title as it should read on the grid and in exports, including the TL suffix. */
 export function blockTitle(block: Block, activity?: Activity): string {
   const base = block.title ?? activity?.name ?? 'Untitled'
@@ -95,7 +110,7 @@ export function exportCsv(
       blockTitle(block, activity).replace(/\n/g, ' '),
       block.delivery,
       block.venueId ? venues.get(block.venueId)?.name ?? block.venueId : '',
-      block.staffIds.map((id) => staff.get(id)?.name ?? id).join(', '),
+      staffLabels(block, staff).join(', '),
       (block.note ?? '').replace(/\n/g, ' '),
     ])
   }

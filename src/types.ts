@@ -29,33 +29,11 @@ export const DELIVERY_SUFFIX: Record<Delivery, string> = {
   self_led: ' - Self Led',
 }
 
-export type ActivityCategory =
-  | 'adventure'
-  | 'water'
-  | 'nature'
-  | 'teamwork'
-  | 'craft'
-  | 'navigation'
-  | 'camping'
-  | 'games'
-
-export const CATEGORY_LABELS: Record<ActivityCategory, string> = {
-  adventure: 'Adventure',
-  water: 'Water',
-  nature: 'Nature & Ecology',
-  teamwork: 'Teamwork',
-  craft: 'Craft',
-  navigation: 'Navigation',
-  camping: 'Camping & Cooking',
-  games: 'Games',
-}
-
 export interface Activity {
   id: string
   name: string
   /** Sites this activity can run at. */
   sites: Site[]
-  category: ActivityCategory
   /** Hex colour carried over from the existing "Activities Colour Key" sheets. */
   colour: string
   /** Typical run time in minutes, used as the default block length. */
@@ -229,6 +207,12 @@ export interface Block {
   title?: string
   delivery: Delivery
   staffIds: string[]
+  /**
+   * Subset of `staffIds` who are on this session to be trained rather than to
+   * run it. They print with a `#` after their name and don't count towards the
+   * activity's staffing requirement.
+   */
+  trainingStaffIds?: string[]
   venueId?: string
   note?: string
   /** Locked blocks cannot be moved or resized by dragging. */
@@ -312,4 +296,4 @@ export interface ProgramDocument {
   updatedAt: string
 }
 
-export const DOCUMENT_VERSION = 4
+export const DOCUMENT_VERSION = 5

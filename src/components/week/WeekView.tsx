@@ -1,23 +1,18 @@
-import { useMemo } from 'react'
+import { useMemo, useState } from 'react'
 import type { Activity, Block, Booking, Issue } from '@/types'
-import { bookingHeadline, bookingSubhead } from '@/lib/exportImport'
-import { formatDate } from '@/lib/time'
+import { blockTitle, bookingHeadline, bookingSubhead } from '@/lib/exportImport'
+import { blockPalette } from '@/lib/colour'
+import { addDays, dateRange, formatDate, formatTime, startOfWeek, weekdayShort } from '@/lib/time'
+import { termWeekOfWeek } from '@/lib/term'
 import { ScheduleGrid } from '@/components/schedule/ScheduleGrid'
 import { TimeAxis } from '@/components/schedule/TimeAxis'
-import { Button, EmptyState } from '@/components/ui/primitives'
+import { Button, EmptyState, Select, cx } from '@/components/ui/primitives'
 
 const HEADER_HEIGHT = 52
 
-/**
- * The holistic view: every school on site for one day, side by side — the same
- * picture as the current "Holistic" sheet, but with clashes between schools
- * (shared venues, shared equipment, shared staff) flagged as you drag.
- */
-export function WeekView({
-  bookings, date, blocks, activities, venueNames, staffNames, issues,
-  selection, highlightIds, dayStartMin, dayEndMin, zoom, dark, showConflicts, showDetail,
-  onSelect, onClearSelection, onOpenBooking, onNewBooking,
-}: {
+export type SiteMode = 'day' | 'week'
+
+export interface WeekViewProps {
   bookings: Booking[]
   date: string
   blocks: Block[]
@@ -37,37 +32,127 @@ export function WeekView({
   onClearSelection: () => void
   onOpenBooking: (id: string) => void
   onNewBooking: () => void
-}) {
+  onDateChange: (date: string) => void
+}
+
+/**
+ * The holistic view: what's happening across the site, either for one day or
+ * for a whole week, for every school on site or just one.
+ *
+ * Day mode is the editing picture — the same grid as the planning view, one
+ * column block per school, with clashes between schools flagged and sessions
+ * draggable straight from one school to another. Week mode trades the time
+ * axis for coverage: seven days at once, each school's sessions listed in
+ * order, which is the view you want when you're deciding where a new booking
+ * can go.
+ */
+export function WeekView({
+  bookings, date, blocks, activities, venueNames, staffNames, issues,
+  selection, highlightIds, dayStartMin, dayEndMin, zoom, dark, showConflicts, showDetail,
+  onSelect, onClearSelection, onOpenBooking, onNewBooking, onDateChange,
+}: WeekViewProps) {
+  const [mode, setMode] = useState<SiteMode>('day')
+  const [focusId, setFocusId] = useState<string>('all')
+
+  const weekStart = useMemo(() => startOfWeek(date), [date])
+  const weekDays = useMemo(() => dateRange(weekStart, addDays(weekStart, 6)), [weekStart])
+
+  // "All schools" is the usual case; focusing one is how you check a single
+  // stay against everything else on site without losing the week picture.
+  const inScope = useMemo(
+    () => (focusId === 'all' ? bookings : bookings.filter((b) => b.id === focusId)),
+    [bookings, focusId],
+  )
+
   const onSite = useMemo(
-    () => bookings.filter((booking) => date >= booking.startDate && date <= booking.endDate),
-    [bookings, date],
+    () => inScope.filter((booking) => date >= booking.startDate && date <= booking.endDate),
+    [inScope, date],
+  )
+
+  const onSiteThisWeek = useMemo(
+    () =>
+      inScope.filter(
+        (booking) => booking.startDate <= weekDays[6] && booking.endDate >= weekDays[0],
+      ),
+    [inScope, weekDays],
   )
 
   const dayIssues = useMemo(() => issues.filter((issue) => issue.date === date), [issues, date])
 
+  const term = termWeekOfWeek(weekStart)
+  const shown = mode === 'day' ? onSite : onSiteThisWeek
+
   return (
     <section className="flex min-w-0 flex-1 flex-col overflow-hidden">
       <header className="no-print flex shrink-0 flex-wrap items-center gap-2 border-b border-[var(--line)] bg-[var(--surface)] px-3 py-1.5">
-        <h1 className="text-[13px] font-semibold text-[var(--ink)]">{formatDate(date)}</h1>
-        <span className="text-[11.5px] text-[var(--ink-soft)]">
-          {onSite.length} school{onSite.length === 1 ? '' : 's'} on site
-        </span>
+        <div className="flex items-center gap-0.5 rounded-lg bg-[var(--surface-sunk)] p-0.5">
+          {(['day', 'week'] as SiteMode[]).map((value) => (
+            <button
+              key={value}
+              type="button"
+              onClick={() => setMode(value)}
+              aria-pressed={mode === value}
+              className={cx(
+                'rounded-md px-2.5 py-1 text-[12px] font-medium transition-colors',
+                mode === value
+                  ? 'bg-[var(--surface)] text-[var(--ink)] shadow-[var(--shadow-sm)]'
+                  : 'text-[var(--ink-soft)] hover:text-[var(--ink)]',
+              )}
+            >
+              {value === 'day' ? 'Day' : 'Week'}
+            </button>
+          ))}
+        </div>
+
+        <div className="min-w-0">
+          <h1 className="truncate text-[13px] leading-tight font-semibold text-[var(--ink)]">
+            {mode === 'day' ? formatDate(date) : term.label}
+          </h1>
+          <p className="tnum truncate text-[10.5px] leading-tight text-[var(--ink-faint)]">
+            {mode === 'day'
+              ? term.label
+              : `${formatDate(weekDays[0])} – ${formatDate(weekDays[6])}`}
+            {' · '}
+            {shown.length} school{shown.length === 1 ? '' : 's'}
+          </p>
+        </div>
+
+        <Select
+          value={focusId}
+          onChange={(event) => setFocusId(event.target.value)}
+          aria-label="Which schools to show"
+          className="h-7 w-auto min-w-[150px] text-[12px]"
+        >
+          <option value="all">All schools</option>
+          {bookings.map((booking) => (
+            <option key={booking.id} value={booking.id}>
+              {booking.schoolName}
+            </option>
+          ))}
+        </Select>
+
         <span className="ml-auto text-[11px] text-[var(--ink-faint)]">
-          Drag a session between schools to move it across
+          {mode === 'day'
+            ? 'Drag a session between schools to move it across'
+            : 'Click a day to open it'}
         </span>
       </header>
 
-      {onSite.length === 0 ? (
+      {shown.length === 0 ? (
         <EmptyState
           title="Nobody on site"
-          body={`No school is booked in for ${formatDate(date)}. Pick another day, or add a booking.`}
+          body={
+            mode === 'day'
+              ? `No school is booked in for ${formatDate(date)}. Pick another day, or add a booking.`
+              : `No school is booked in for ${term.label}. Pick another week, or add a booking.`
+          }
           action={
             <Button variant="primary" onClick={onNewBooking}>
               Add a school
             </Button>
           }
         />
-      ) : (
+      ) : mode === 'day' ? (
         <div className="flex min-h-0 flex-1 overflow-auto">
           <TimeAxis
             dayStartMin={dayStartMin}
@@ -151,7 +236,197 @@ export function WeekView({
             })}
           </div>
         </div>
+      ) : (
+        <SiteWeek
+          bookings={onSiteThisWeek}
+          days={weekDays}
+          activeDate={date}
+          blocks={blocks}
+          activities={activities}
+          issues={issues}
+          dark={dark}
+          onOpenBooking={onOpenBooking}
+          onDateChange={onDateChange}
+        />
       )}
     </section>
+  )
+}
+
+/**
+ * Seven days across, one row per school.
+ *
+ * No time axis — at a week's density the axis costs more than it gives, and
+ * what you actually want to read is "who's here, doing what, on which day".
+ */
+function SiteWeek({
+  bookings, days, activeDate, blocks, activities, issues, dark, onOpenBooking, onDateChange,
+}: {
+  bookings: Booking[]
+  days: string[]
+  activeDate: string
+  blocks: Block[]
+  activities: Map<string, Activity>
+  issues: Issue[]
+  dark: boolean
+  onOpenBooking: (id: string) => void
+  onDateChange: (date: string) => void
+}) {
+  const errorDays = useMemo(() => {
+    const set = new Set<string>()
+    for (const issue of issues) if (issue.severity === 'error') set.add(issue.date)
+    return set
+  }, [issues])
+
+  const today = new Date().toISOString().slice(0, 10)
+
+  return (
+    <div className="min-h-0 flex-1 overflow-auto">
+      <table className="w-full border-collapse" style={{ tableLayout: 'fixed' }}>
+        <colgroup>
+          <col style={{ width: 170 }} />
+          {days.map((day) => (
+            <col key={day} />
+          ))}
+        </colgroup>
+        <thead className="sticky top-0 z-20 bg-[var(--surface)]">
+          <tr>
+            <th className="border-b border-[var(--line)] px-2 py-1.5 text-left text-[10.5px] font-semibold tracking-wide text-[var(--ink-faint)] uppercase">
+              School
+            </th>
+            {days.map((day) => (
+              <th key={day} className="border-b border-l border-[var(--line)] p-0">
+                <button
+                  type="button"
+                  onClick={() => onDateChange(day)}
+                  className={cx(
+                    'flex w-full flex-col items-start px-2 py-1.5 text-left transition-colors',
+                    day === activeDate
+                      ? 'bg-[var(--brand-tint)]'
+                      : 'hover:bg-[var(--surface-sunk)]',
+                  )}
+                >
+                  <span className="flex items-center gap-1 text-[11.5px] font-semibold text-[var(--ink)]">
+                    {weekdayShort(day)}
+                    <span className="tnum font-normal text-[var(--ink-faint)]">
+                      {Number(day.slice(8))}
+                    </span>
+                    {day === today && (
+                      <span aria-label="Today" className="h-1.5 w-1.5 rounded-full bg-[var(--brand)]" />
+                    )}
+                    {errorDays.has(day) && (
+                      <span aria-label="Has clashes" className="h-1.5 w-1.5 rounded-full bg-[var(--danger)]" />
+                    )}
+                  </span>
+                </button>
+              </th>
+            ))}
+          </tr>
+        </thead>
+        <tbody>
+          {bookings.map((booking) => (
+            <tr key={booking.id} className="align-top">
+              <th scope="row" className="border-b border-[var(--line)] p-0 text-left">
+                <button
+                  type="button"
+                  onClick={() => onOpenBooking(booking.id)}
+                  className="block w-full px-2 py-1.5 text-left transition-colors hover:bg-[var(--surface-sunk)]"
+                >
+                  <span className="block truncate text-[12px] leading-tight font-semibold text-[var(--ink)]">
+                    {booking.schoolName}
+                  </span>
+                  <span className="block truncate text-[10.5px] text-[var(--ink-soft)]">
+                    {[booking.yearLevel, booking.building].filter(Boolean).join(' · ')}
+                  </span>
+                  <span className="tnum block truncate text-[10px] text-[var(--ink-faint)]">
+                    {booking.groups.length} group{booking.groups.length === 1 ? '' : 's'}
+                    {booking.studentCount ? ` · ${booking.studentCount}` : ''}
+                  </span>
+                </button>
+              </th>
+
+              {days.map((day) => {
+                const onSite = day >= booking.startDate && day <= booking.endDate
+                const dayBlocks = blocks
+                  .filter((b) => b.bookingId === booking.id && b.date === day)
+                  .sort((a, b) => a.startMin - b.startMin)
+
+                return (
+                  <td
+                    key={day}
+                    onDoubleClick={() => onDateChange(day)}
+                    className={cx(
+                      'border-b border-l border-[var(--line)] px-1 py-1',
+                      !onSite && 'bg-[var(--surface-sunk)]',
+                      day === activeDate && 'bg-[var(--brand-tint)]',
+                    )}
+                  >
+                    {!onSite ? (
+                      <span className="sr-only">Not on site</span>
+                    ) : dayBlocks.length === 0 ? (
+                      <span className="block px-1 text-[10.5px] text-[var(--ink-faint)] italic">
+                        Nothing planned
+                      </span>
+                    ) : (
+                      <ul className="flex flex-col gap-[2px]">
+                        {dayBlocks.map((block) => (
+                          <WeekChip
+                            key={block.id}
+                            block={block}
+                            activity={block.activityId ? activities.get(block.activityId) : undefined}
+                            booking={booking}
+                            dark={dark}
+                          />
+                        ))}
+                      </ul>
+                    )}
+                  </td>
+                )
+              })}
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  )
+}
+
+function WeekChip({
+  block, activity, booking, dark,
+}: {
+  block: Block
+  activity?: Activity
+  booking: Booking
+  dark: boolean
+}) {
+  const colour = block.colour ?? activity?.colour ?? '#8a8f98'
+  const palette = blockPalette(colour, dark)
+  const groups =
+    block.groupIds.length >= booking.groups.length
+      ? 'All'
+      : block.groupIds
+          .map((id) => booking.groups.find((g) => g.id === id)?.name ?? '')
+          .filter(Boolean)
+          .join(', ')
+
+  return (
+    <li
+      title={`${formatTime(block.startMin)} · ${blockTitle(block, activity)} · ${groups}`}
+      className="flex items-center gap-1 overflow-hidden rounded-[4px] border px-1 py-[1px]"
+      style={{ background: palette.surface, borderColor: palette.border, color: palette.text }}
+    >
+      <span aria-hidden className="h-2.5 w-[2px] shrink-0 rounded-full" style={{ background: palette.rail }} />
+      <span className="tnum shrink-0 text-[9.5px]" style={{ color: palette.muted }}>
+        {formatTime(block.startMin)}
+      </span>
+      <span className="min-w-0 flex-1 truncate text-[10px] font-medium">
+        {blockTitle(block, activity).replace(/\n/g, ' · ')}
+      </span>
+      {groups !== 'All' && (
+        <span className="shrink-0 text-[9px]" style={{ color: palette.muted }}>
+          {groups}
+        </span>
+      )}
+    </li>
   )
 }

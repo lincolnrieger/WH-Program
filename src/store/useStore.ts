@@ -79,11 +79,14 @@ interface State {
   applyDayTemplate: (templateId: string, bookingId: string, date: string) => void
   generateRotation: (input: {
     bookingId: string
-    date: string
+    dates: string[]
     slots: RotationSlot[]
     activityIds: string[]
     groupIds: string[]
     delivery: Delivery
+    continueAcrossDays?: boolean
+    /** Clear whatever activities are already on those days first. */
+    replaceExisting?: boolean
   }) => void
   copyDay: (bookingId: string, fromDate: string, toDate: string) => void
   clearDay: (bookingId: string, date: string) => void
@@ -368,23 +371,41 @@ export const useStore = create<State>((set, get) => {
       set({ highlightIds: created.map((b) => b.id) })
     },
 
-    generateRotation: ({ bookingId, date, slots, activityIds, groupIds, delivery }) => {
+    generateRotation: ({
+      bookingId, dates, slots, activityIds, groupIds, delivery,
+      continueAcrossDays, replaceExisting,
+    }) => {
       const { doc } = get()
       const booking = doc.bookings.find((b) => b.id === bookingId)
       if (!booking) return
 
       const created = buildRotation({
         booking,
-        date,
+        dates,
         slots,
         activityIds,
         groupIds,
         delivery,
+        continueAcrossDays,
         activities: allActivitiesMap(doc),
       })
       if (created.length === 0) return
 
-      commit((d) => ({ ...d, blocks: [...d.blocks, ...created] }))
+      const targetDays = new Set(dates)
+      commit((d) => ({
+        ...d,
+        blocks: [
+          // Meals and logistics stay put — only the activities get replaced.
+          ...d.blocks.filter(
+            (b) =>
+              !replaceExisting ||
+              b.bookingId !== bookingId ||
+              !targetDays.has(b.date) ||
+              b.kind !== 'activity',
+          ),
+          ...created,
+        ],
+      }))
       set({ highlightIds: created.map((b) => b.id), selection: { blockIds: [] } })
     },
 

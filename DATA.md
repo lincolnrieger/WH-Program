@@ -146,11 +146,48 @@ patterns.
 
 ---
 
+## School terms
+
+**Source:** published South Australian government school term dates.
+**Lives in:** `src/lib/term.ts`
+
+Camps are named by term week long before anyone looks up a date, so every date
+label in the app carries one — "Term 3 Week 9" on the week bar, in the week
+picker, and on the print headers. Week 1 is the week containing the first day of
+term, so a Tuesday start still makes that whole week Week 1, which is how
+schools count it.
+
+`SA_TERM_DATES` holds one entry per year:
+
+```ts
+2026: [
+  { start: '2026-01-27', end: '2026-04-10' },   // Term 1
+  { start: '2026-04-27', end: '2026-07-03' },   // Term 2
+  { start: '2026-07-20', end: '2026-09-25' },   // Term 3
+  { start: '2026-10-12', end: '2026-12-11' },   // Term 4
+],
+```
+
+**To add a year**, add its four terms to that object when the department
+publishes them. Nothing else needs changing.
+
+Years that aren't in the table still get labelled: the app falls back to the
+pattern the department has used for decades — terms starting on the Monday
+nearest 28 January, 28 April, 21 July and 13 October, running 11 / 10 / 10 / 9
+weeks. An inferred label is marked with a `~` on the week bar so it's clear it
+hasn't been checked against a published calendar.
+
+Dates outside any term read as *School holidays*.
+
+---
+
 ## What wasn't carried across
 
 - **Staff rosters** (the *Itinerary — 3 groups + Staffing* sheet). The app
-  assigns staff per session rather than as a shift, and can show each person's
-  span from that. Shift times themselves aren't modelled yet.
+  assigns staff per session rather than as a shift. It does work out each
+  person's continuous shift from those sessions — that's what the five-hour
+  break check runs on, and what the inspector warns about before you add
+  someone — but start and finish times for a day aren't rostered directly.
 - **Roonka-specific venues** are thinner than the Woodhouse list — the source
   sheet doesn't name locations for Roonka activities. Add them on the **Venues**
   page and clash detection will start covering them.
