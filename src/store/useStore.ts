@@ -17,9 +17,12 @@ import { findIssues, type ConflictContext } from '@/lib/conflicts'
 import { buildRotation, type RotationSlot } from '@/lib/rotation'
 import { uid } from '@/lib/id'
 import { addDays, dateRange } from '@/lib/time'
+import type { RemoteState } from '@/lib/api'
+import { resetAll } from '@/lib/api'
 import {
   loadDocument, loadPrefs, savePrefs, saveDocument, type Prefs,
 } from './persist'
+import { clearQueue, diffDocuments, documentToOps, enqueue, flushNow, refresh } from './sync'
 
 const HISTORY_LIMIT = 60
 
@@ -52,8 +55,12 @@ interface State {
 
   // ── document ──
   setDoc: (doc: ProgramDocument) => void
-  newDocument: (site: Site) => void
-  renameDocument: (name: string) => void
+  /** Replaces the plan with what the database holds. Never sent back up. */
+  applyRemote: (remote: RemoteState) => void
+  /** Wipes the shared plan — every school, session and catalogue edit. */
+  startFresh: () => Promise<void>
+  /** Fills an empty database with the sample week. */
+  loadSample: () => Promise<void>
   setSite: (site: Site) => void
   undo: () => void
   redo: () => void
@@ -126,15 +133,42 @@ function stamp(doc: ProgramDocument): ProgramDocument {
   return { ...doc, updatedAt: new Date().toISOString() }
 }
 
-const initialDoc = loadDocument() ?? createSeedDocument()
+/**
+ * The plan from last time, so the app paints immediately. The database is the
+ * record and replaces this the moment it answers; an empty plan is the right
+ * starting point for a browser that has never opened the app.
+ */
+const initialDoc = loadDocument() ?? emptyDocument('woodhouse')
 const initialPrefs = loadPrefs()
 
+function emptyDocument(site: Site): ProgramDocument {
+  return {
+    version: DOCUMENT_VERSION,
+    site,
+    bookings: [],
+    blocks: [],
+    customActivities: [],
+    customVenues: [],
+    customStaff: [],
+    overrides: structuredClone(EMPTY_OVERRIDES),
+    updatedAt: new Date().toISOString(),
+  }
+}
+
 export const useStore = create<State>((set, get) => {
-  /** Applies a change, pushing the previous document onto the undo stack. */
+  /**
+   * Applies a change, pushing the previous document onto the undo stack and
+   * sending whatever rows it touched to the database.
+   *
+   * The diff is what makes row-level saving possible: the store still works in
+   * whole documents, but only the bookings and sessions that actually changed
+   * go over the wire.
+   */
   function commit(mutate: (doc: ProgramDocument) => ProgramDocument): void {
     const { doc, past } = get()
     const next = stamp(mutate(doc))
     saveDocument(next)
+    enqueue(diffDocuments(doc, next))
     set({
       doc: next,
       past: [...past, doc].slice(-HISTORY_LIMIT),
@@ -156,7 +190,9 @@ export const useStore = create<State>((set, get) => {
     search: '',
 
     setDoc: (doc) => {
+      const previous = get().doc
       saveDocument(doc)
+      enqueue(diffDocuments(previous, doc))
       set((s) => ({
         doc,
         past: [...s.past, s.doc].slice(-HISTORY_LIMIT),
@@ -167,38 +203,93 @@ export const useStore = create<State>((set, get) => {
       }))
     },
 
-    newDocument: (site) => {
+    /**
+     * Takes the database's word for it.
+     *
+     * The site being viewed and the undo history are this browser's, not the
+     * plan's, so they survive. Anything selected that someone else has since
+     * deleted is dropped rather than left pointing at nothing.
+     */
+    applyRemote: (remote) => {
+      const current = get().doc
       const doc: ProgramDocument = {
         version: DOCUMENT_VERSION,
-        name: 'Untitled week',
-        site,
-        bookings: [],
-        blocks: [],
-        customActivities: [],
-        customVenues: [],
-        customStaff: [],
-        overrides: structuredClone(EMPTY_OVERRIDES),
+        site: current.site,
+        bookings: remote.bookings,
+        blocks: remote.blocks,
+        customActivities: remote.customActivities as ProgramDocument['customActivities'],
+        customVenues: remote.customVenues as ProgramDocument['customVenues'],
+        customStaff: remote.customStaff as ProgramDocument['customStaff'],
+        overrides: remote.overrides ?? structuredClone(EMPTY_OVERRIDES),
         updatedAt: new Date().toISOString(),
       }
       saveDocument(doc)
+
+      const blockIds = new Set(doc.blocks.map((b) => b.id))
+      const bookingExists = doc.bookings.some((b) => b.id === get().activeBookingId)
+
       set((s) => ({
         doc,
-        past: [...s.past, s.doc].slice(-HISTORY_LIMIT),
+        selection: { blockIds: s.selection.blockIds.filter((id) => blockIds.has(id)) },
+        activeBookingId: bookingExists
+          ? s.activeBookingId
+          : (doc.bookings.find((b) => b.site === doc.site)?.id ?? null),
+      }))
+    },
+
+    startFresh: async () => {
+      clearQueue()
+      await resetAll()
+      const doc = emptyDocument(get().doc.site)
+      saveDocument(doc)
+      set({
+        doc,
+        past: [],
         future: [],
         activeBookingId: null,
         activeDate: null,
         selection: { blockIds: [] },
-      }))
+      })
     },
 
-    renameDocument: (name) => commit((doc) => ({ ...doc, name })),
-    setSite: (site) => commit((doc) => ({ ...doc, site })),
+    loadSample: async () => {
+      const sample = createSeedDocument()
+      // Straight to the database rather than through commit(), so the sample
+      // week arrives as one write instead of a hundred.
+      enqueue(documentToOps(sample))
+      await flushNow()
+      await refresh()
+      const first = get().doc.bookings[0]
+      set({
+        past: [],
+        future: [],
+        activeBookingId: first?.id ?? null,
+        activeDate: first?.startDate ?? null,
+      })
+    },
+
+    setSite: (site) =>
+      // Which site you're looking at is a view setting, not part of the plan,
+      // so it stays in this browser instead of following everyone else around.
+      set((s) => {
+        const doc = { ...s.doc, site }
+        saveDocument(doc)
+        const stillHere = s.doc.bookings.find((b) => b.id === s.activeBookingId)?.site === site
+        return {
+          doc,
+          activeBookingId: stillHere
+            ? s.activeBookingId
+            : (doc.bookings.find((b) => b.site === site)?.id ?? null),
+          selection: { blockIds: [] },
+        }
+      }),
 
     undo: () => {
       const { past, doc, future } = get()
       const previous = past[past.length - 1]
       if (!previous) return
       saveDocument(previous)
+      enqueue(diffDocuments(doc, previous))
       set({
         doc: previous,
         past: past.slice(0, -1),
@@ -211,6 +302,7 @@ export const useStore = create<State>((set, get) => {
       const next = future[0]
       if (!next) return
       saveDocument(next)
+      enqueue(diffDocuments(doc, next))
       set({
         doc: next,
         past: [...past, doc].slice(-HISTORY_LIMIT),

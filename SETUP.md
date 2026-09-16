@@ -51,12 +51,64 @@ npm install      # once, and again whenever dependencies change
 npm run dev
 ```
 
-Open <http://localhost:5173>. You should see the sample week. Press
+Open <http://localhost:5173>. The app loads with an empty plan and the toolbar
+reports **Offline** — there's no database yet, which is the next step. Press
 <kbd>Ctrl</kbd>+<kbd>C</kbd> in the terminal to stop it.
 
 ---
 
-## 4. Connect Cloudflare to GitHub
+## 4. Create the database
+
+The plan lives in a **Cloudflare D1** database, so everyone on every computer
+sees the same thing. You create it once, and never touch it again.
+
+```bash
+npx wrangler login                 # opens a browser to authorise, once
+npx wrangler d1 create wh-program
+```
+
+It prints a block like this:
+
+```
+[[d1_databases]]
+binding = "DB"
+database_name = "wh-program"
+database_id = "a1b2c3d4-...."
+```
+
+Copy that **`database_id`** into `wrangler.jsonc`, replacing
+`PASTE_YOUR_DATABASE_ID_HERE`:
+
+```jsonc
+"d1_databases": [
+  {
+    "binding": "DB",
+    "database_name": "wh-program",
+    "database_id": "a1b2c3d4-...."   // <- yours goes here
+  }
+]
+```
+
+Then create the tables:
+
+```bash
+npm run db:schema
+```
+
+Commit the change, because Cloudflare builds from what's in GitHub:
+
+```bash
+git add wrangler.jsonc
+git commit -m "Point at the D1 database"
+git push
+```
+
+> The id is not a secret — it only identifies the database, and reaching it
+> still needs your Cloudflare account. It belongs in the repository.
+
+---
+
+## 5. Connect Cloudflare to GitHub
 
 This is the setup to use. Cloudflare rebuilds and redeploys every time you push
 — you never deploy by hand.
@@ -81,13 +133,18 @@ This is the setup to use. Cloudflare rebuilds and redeploys every time you push
 The first build takes two or three minutes. When it finishes you get a URL like
 `https://wh-program.YOUR-SUBDOMAIN.workers.dev`. That's the live app.
 
+Open it and use **Program → Load the sample week** to check the database is
+wired up. If the schools appear, and are still there when you open the same URL
+on your phone, everything is working.
+
 > **If the build fails**, open the build log in Cloudflare and read the last
-> ~20 lines — it will name the problem. The usual cause is that `npm run build`
-> also fails locally, so run it locally first.
+> ~20 lines — it will name the problem. The usual causes are that `npm run
+> build` also fails locally, or that `database_id` in `wrangler.jsonc` is still
+> the placeholder.
 
 ### Deploying by hand instead
 
-You don't need this if step 4 worked, but it's there if you want it:
+You don't need this if step 5 worked, but it's there if you want it:
 
 ```bash
 npx wrangler login     # opens a browser to authorise, once
@@ -96,7 +153,7 @@ npm run deploy         # builds and uploads
 
 ---
 
-## 5. Put it on your own address (optional)
+## 6. Put it on your own address (optional)
 
 To serve it at `program.woodhouse.org.au` instead of `.workers.dev`, the domain
 has to be on Cloudflare:
@@ -109,9 +166,11 @@ has to be on Cloudflare:
 
 ---
 
-## 6. Lock it down (recommended)
+## 7. Lock it down — do this one
 
-By default anyone with the URL can open the app. To restrict it to your staff:
+Anyone with the URL can read **and change** the plan, because there is no login.
+That was awkward when plans lived in each person's browser; now that they're
+shared it matters, so put Cloudflare Access in front of the site:
 
 1. Cloudflare dashboard → **Zero Trust** → **Access** → **Applications** →
    **Add an application** → **Self-hosted**.
@@ -122,9 +181,8 @@ By default anyone with the URL can open the app. To restrict it to your staff:
 Staff then get a one-time email code the first time they visit. The free Zero
 Trust plan covers up to 50 users.
 
-Worth knowing: plans are stored in each person's own browser, so access control
-protects the app, not the data. Whoever is doing the planning keeps the master
-copy — see **File → Save to file**.
+Access sits in front of the whole hostname, so it covers the API as well as the
+pages — there's no back door to the database left open.
 
 ---
 
@@ -134,7 +192,27 @@ copy — see **File → Save to file**.
 
 ```bash
 git pull                       # get anything others changed
-npm run dev                    # edit, with the browser reloading as you save
+npm run dev                    # the app, with the browser reloading as you save
+```
+
+That gives you the interface on its own. It runs perfectly well like that —
+it just reports itself **Offline** in the toolbar and keeps everything in your
+browser, which is all you need for most interface work.
+
+To work against a real database, run the API in a **second terminal**:
+
+```bash
+npm run db:schema:local        # once, to create the local tables
+npm run dev:api                # the Worker and a local D1, on port 8787
+```
+
+`npm run dev` proxies `/api` to it. The local database is a file under
+`.wrangler/` and is nothing to do with the live one, so experiment freely.
+
+To check the real thing end to end before pushing:
+
+```bash
+npm run preview                # builds, then serves it exactly as deployed
 ```
 
 When you're happy:
@@ -179,7 +257,6 @@ Edit `src/data/activities.ts`. Each entry looks like:
   id: 'bouldering',              // unique, never change once in use
   name: 'Bouldering',
   sites: ['woodhouse'],          // 'woodhouse' and/or 'roonka'
-  category: 'adventure',
   colour: '#ffc000',             // from the Activities Colour Key sheet
   defaultDurationMin: 90,
   setupMin: 5,
@@ -216,29 +293,61 @@ See [DATA.md](DATA.md#staff-competency).
 
 ---
 
-## Next step: shared plans across staff
+## The database
 
-Right now each person's plan lives in their own browser. Making plans shared
-means adding a small backend, which this project is already shaped for: the
-Worker that serves the app can also answer API requests, and all document
-reading and writing already goes through one file, `src/store/persist.ts`.
+One deployment, one shared plan. Both sites live in it — Woodhouse and Roonka
+are a column on a booking, not separate databases, which is what lets the
+whole-site views see across both.
 
-Roughly:
+| Table | Holds |
+| --- | --- |
+| `bookings` | One row per school stay. Groups ride along as JSON. |
+| `blocks` | One row per scheduled session. |
+| `catalogue` | Activities, venues and staff **added** in the app. |
+| `settings` | Catalogue edits, and the revision counter. |
 
-1. Create a D1 database and bind it in `wrangler.jsonc`:
+The catalogue that ships with the app is in the code and is never copied into
+the database — only what you've added or changed on top of it. So a later
+refresh of the workbook data still reaches everything you haven't overridden.
 
-   ```bash
-   npx wrangler d1 create wh-program
-   ```
+The whole schema is in [`schema.sql`](schema.sql), and every statement in it is
+`IF NOT EXISTS`, so `npm run db:schema` is safe to re-run and doubles as the
+migration when a table is added.
 
-2. Add a Worker entry point (`src/worker.ts`) with `GET`/`PUT /api/program/:id`
-   reading and writing a JSON blob, and point `main` at it in `wrangler.jsonc`.
-3. Change `loadDocument` / `saveDocument` in `persist.ts` to call those
-   endpoints, keeping `localStorage` as an offline cache.
-4. Use the Cloudflare Access identity from step 6 to know who's editing.
+### How saving works
 
-Keep the `ProgramDocument` shape as it is and the rest of the app won't need to
-change.
+The app holds the whole plan in memory — that's what undo works on — but saves
+**row by row**. Each change is compared against the one before it and only the
+bookings and sessions that actually moved are sent. Two people planning
+different schools at the same time therefore don't overwrite each other. Within
+a single row, the last save wins.
+
+Every write bumps a revision counter. Each browser checks it every ten seconds,
+and whenever you come back to the tab, and re-reads the plan when it has moved.
+Someone else's change lands in front of you within about ten seconds without a
+refresh.
+
+If the network drops, the app keeps working: changes queue up in your browser,
+the toolbar badge turns grey and says **Offline**, and everything goes out as
+soon as the connection is back — even if you closed the tab in between.
+
+### Looking at the data directly
+
+```bash
+npx wrangler d1 execute wh-program --remote \
+  --command "SELECT school_name, start_date, end_date FROM bookings ORDER BY start_date"
+```
+
+### Backups
+
+D1 keeps point-in-time history. To take one yourself:
+
+```bash
+npx wrangler d1 export wh-program --remote --output backup.sql
+```
+
+Worth doing before anything irreversible — **Program → Start fresh** in
+particular, which empties the plan for everyone.
 
 ---
 
@@ -250,9 +359,19 @@ fails, delete `node_modules` and `package-lock.json` and try again.
 **Cloudflare build fails but it works locally** — make sure `package-lock.json`
 is committed (`git status` should not list it as untracked).
 
-**The app loads but the plan is gone** — plans are per browser. Check you're on
-the same browser and profile, and that site data wasn't cleared. If you have a
-`.json` export, **File → Open saved file**.
+**The toolbar says "Can't save"** — hover it for the reason. *No database
+bound* means `database_id` in `wrangler.jsonc` is still the placeholder. *The
+database has no tables yet* means `npm run db:schema` hasn't been run against
+the live database.
+
+**The toolbar says "Offline"** — the app can't reach the API. Your changes are
+safe in this browser and will be sent as soon as it can; click the badge to try
+straight away. If it stays grey, check the deployment is healthy by opening
+`/api/health` on the site — it should answer with a count of bookings.
+
+**The plan is empty on a new computer** — open `/api/health`. If it reports
+`"bookings": 0`, the database really is empty; if it errors, that's the problem
+to fix first.
 
 **Changes don't show up on the live site** — check the Cloudflare deployment
 finished and succeeded, then hard-refresh (<kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>R</kbd>).

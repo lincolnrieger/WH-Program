@@ -2,15 +2,15 @@ import { useCallback, useEffect, useMemo, useState } from 'react'
 import type { Booking, Issue } from '@/types'
 import { SITES } from '@/types'
 import { ROUTINES } from '@/data/activities'
-import { createSeedDocument } from '@/data/seed'
 import {
   resolveActivities, resolveActivityMap, resolveStaff, resolveStaffMap, resolveVenueMap,
   resolveVenues,
 } from '@/data/resolve'
 import { computeIssues, useStore } from '@/store/useStore'
+import { flushNow, refresh, startSync, subscribeToSync, syncState, type SyncState } from '@/store/sync'
 import { useDragController } from '@/hooks/useDragController'
 import { useKeyboardShortcuts } from '@/hooks/useKeyboardShortcuts'
-import { exportCsv, exportJson, importJson } from '@/lib/exportImport'
+import { exportCsv } from '@/lib/exportImport'
 import { suggestSlots } from '@/lib/rotation'
 import { addDays, startOfWeek } from '@/lib/time'
 import { TopBar } from '@/components/layout/TopBar'
@@ -48,9 +48,30 @@ export default function App() {
   const [printOpen, setPrintOpen] = useState(false)
   const [printOptions, setPrintOptions] = useState<PrintOptions>(DEFAULT_PRINT_OPTIONS)
   const [toast, setToast] = useState<string | null>(null)
+  const [sync, setSync] = useState<SyncState>(() => syncState())
 
   useDragController()
   useKeyboardShortcuts({ onPrint: () => setPrintOpen(true) })
+
+  // Read the shared plan, then keep watching for anyone else's changes.
+  useEffect(() => subscribeToSync(setSync), [])
+
+  useEffect(() => {
+    void startSync({
+      onRemoteState: (remote) => useStore.getState().applyRemote(remote),
+      // A browser that used the app before it had a database still has that
+      // plan. If the database is empty, it is the plan — send it up rather
+      // than letting the upgrade quietly lose a term's work.
+      localFallback: () => useStore.getState().doc,
+    })
+  }, [])
+
+  // Closing the tab mid-edit shouldn't cost the last half-second of typing.
+  useEffect(() => {
+    const send = () => void flushNow()
+    window.addEventListener('pagehide', send)
+    return () => window.removeEventListener('pagehide', send)
+  }, [])
 
   useEffect(() => {
     document.documentElement.dataset.theme = prefs.theme
@@ -204,13 +225,36 @@ export default function App() {
     [activities, prefs.dayStartMin, prefs.dayEndMin],
   )
 
-  const handleImport = useCallback(async (file: File) => {
+  const loadSample = useCallback(async () => {
+    if (
+      doc.bookings.length > 0 &&
+      !confirm(
+        'Add the sample week to the shared plan? It sits alongside whatever is already there, and you can delete the sample schools afterwards.',
+      )
+    ) {
+      return
+    }
     try {
-      const imported = await importJson(file)
-      useStore.getState().setDoc(imported)
-      setToast(`Opened “${imported.name}”.`)
+      await useStore.getState().loadSample()
+      setToast('Sample week added.')
     } catch (error) {
-      setToast(error instanceof Error ? error.message : 'Could not read that file.')
+      setToast(error instanceof Error ? error.message : 'Could not add the sample week.')
+    }
+  }, [doc.bookings.length])
+
+  const startFresh = useCallback(async () => {
+    if (
+      !confirm(
+        'Delete the whole plan — every school, session and catalogue edit — for everyone? This cannot be undone.',
+      )
+    ) {
+      return
+    }
+    try {
+      await useStore.getState().startFresh()
+      setToast('Plan cleared.')
+    } catch (error) {
+      setToast(error instanceof Error ? error.message : 'Could not clear the plan.')
     }
   }, [])
 
@@ -238,8 +282,6 @@ export default function App() {
   return (
     <div className="app-shell flex h-full flex-col overflow-hidden">
       <TopBar
-        documentName={doc.name}
-        onRename={(name) => useStore.getState().renameDocument(name)}
         site={doc.site}
         onSite={(site) => useStore.getState().setSite(site)}
         page={page}
@@ -250,20 +292,13 @@ export default function App() {
         canRedo={canRedo}
         onUndo={() => useStore.getState().undo()}
         onRedo={() => useStore.getState().redo()}
-        onExportJson={() => exportJson(doc)}
         onExportCsv={() => exportCsv(doc, activities, venueMap, staffMap)}
-        onImport={handleImport}
         onPrint={() => setPrintOpen(true)}
         issueCount={errorCount}
-        onNew={() => {
-          if (
-            confirm(
-              'Start a new program? The current one stays in your browser until you replace it — export it first if you want a copy.',
-            )
-          ) {
-            useStore.getState().newDocument(doc.site)
-          }
-        }}
+        sync={sync}
+        onRetrySync={() => void refresh()}
+        onLoadSample={() => void loadSample()}
+        onStartFresh={() => void startFresh()}
       />
 
       {showsGrid && (
@@ -406,24 +441,34 @@ export default function App() {
               />
             ) : (
               <EmptyState
-                title="No school selected"
-                body="Add a school to start building its itinerary, or load the sample week to see how it works."
+                title={
+                  sync.status === 'loading'
+                    ? 'Loading the plan…'
+                    : siteBookings.length === 0
+                      ? `No schools at ${siteName} yet`
+                      : 'No school selected'
+                }
+                body={
+                  sync.status === 'loading'
+                    ? 'Reading the shared plan from the database.'
+                    : 'Add a school to start building its itinerary, or load the sample week to see how it all works.'
+                }
                 action={
-                  <div className="flex gap-2">
-                    <Button
-                      variant="primary"
-                      onClick={() => {
-                        const id = useStore.getState().addBooking({ startDate: date })
-                        const created = useStore.getState().doc.bookings.find((b) => b.id === id)
-                        if (created) setEditingBooking(created)
-                      }}
-                    >
-                      Add a school
-                    </Button>
-                    <Button onClick={() => useStore.getState().setDoc(createSeedDocument())}>
-                      Load sample week
-                    </Button>
-                  </div>
+                  sync.status === 'loading' ? undefined : (
+                    <div className="flex gap-2">
+                      <Button
+                        variant="primary"
+                        onClick={() => {
+                          const id = useStore.getState().addBooking({ startDate: date })
+                          const created = useStore.getState().doc.bookings.find((b) => b.id === id)
+                          if (created) setEditingBooking(created)
+                        }}
+                      >
+                        Add a school
+                      </Button>
+                      <Button onClick={() => void loadSample()}>Load the sample week</Button>
+                    </div>
+                  )
                 }
               />
             ))}
@@ -450,7 +495,7 @@ export default function App() {
         activities={activities}
         venues={venueMap}
         staff={staffMap}
-        programName={doc.name}
+        programName={siteName}
         options={printOptions}
         siteName={siteName}
         date={date}

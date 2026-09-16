@@ -1,8 +1,20 @@
 import type { ProgramDocument } from '@/types'
 import { DOCUMENT_VERSION, EMPTY_OVERRIDES } from '@/types'
+import type { Op } from '@/lib/api'
+
+/**
+ * Local storage, which since the move to D1 is a **cache**, not the record.
+ *
+ * It does two jobs. It lets the app paint the plan you had last time before the
+ * database has answered, so opening it is instant rather than a spinner. And it
+ * holds any changes that haven't reached the database yet, so closing the
+ * laptop mid-edit on a bad connection doesn't lose them.
+ */
 
 const STORAGE_KEY = 'wh-program:document:v1'
 const PREFS_KEY = 'wh-program:prefs:v1'
+const QUEUE_KEY = 'wh-program:queue:v1'
+const ADOPTED_KEY = 'wh-program:adopted:v1'
 
 export interface Prefs {
   theme: 'light' | 'dark'
@@ -37,7 +49,6 @@ function migrate(raw: unknown): ProgramDocument | null {
 
   return {
     version: DOCUMENT_VERSION,
-    name: doc.name ?? 'Untitled week',
     site: doc.site ?? 'woodhouse',
     bookings: doc.bookings,
     blocks: doc.blocks.map((block) => ({
@@ -102,5 +113,59 @@ export function savePrefs(prefs: Prefs): void {
     localStorage.setItem(PREFS_KEY, JSON.stringify(prefs))
   } catch {
     // ignore — prefs are a convenience, not data
+  }
+}
+
+/**
+ * Whether this browser has ever talked to the database.
+ *
+ * It gates one thing: offering this browser's cached plan to an empty
+ * database. That is how someone upgrading from the version that only had local
+ * storage keeps their work — but only the first time. Without the flag, a
+ * browser holding a stale cache would cheerfully re-upload a plan that someone
+ * else had just deliberately cleared.
+ */
+export function hasAdoptedDatabase(): boolean {
+  try {
+    return localStorage.getItem(ADOPTED_KEY) === '1'
+  } catch {
+    return false
+  }
+}
+
+export function markDatabaseAdopted(): void {
+  try {
+    localStorage.setItem(ADOPTED_KEY, '1')
+  } catch {
+    // Not being able to remember is the safe direction: the fallback only ever
+    // fires against a database that is already completely empty.
+  }
+}
+
+/**
+ * Changes made but not yet accepted by the database.
+ *
+ * Kept on disk rather than only in memory so that a closed tab, a crash or a
+ * flat battery during an outage costs nothing: the queue is picked up and sent
+ * the next time the app opens with a connection.
+ */
+export function loadQueue(): Op[] {
+  try {
+    const raw = localStorage.getItem(QUEUE_KEY)
+    if (!raw) return []
+    const parsed = JSON.parse(raw) as unknown
+    return Array.isArray(parsed) ? (parsed as Op[]) : []
+  } catch {
+    return []
+  }
+}
+
+export function saveQueue(ops: Op[]): void {
+  try {
+    if (ops.length === 0) localStorage.removeItem(QUEUE_KEY)
+    else localStorage.setItem(QUEUE_KEY, JSON.stringify(ops))
+  } catch {
+    // Storage full or blocked. The queue still lives in memory for this
+    // session, so the only thing lost is surviving a reload while offline.
   }
 }

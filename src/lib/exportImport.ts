@@ -1,5 +1,5 @@
 import type { Activity, Block, Booking, ProgramDocument } from '@/types'
-import { DELIVERY_SUFFIX } from '@/types'
+import { DELIVERY_SUFFIX, SITES } from '@/types'
 import { dateRange, formatDate, formatTime } from './time'
 
 export function downloadFile(filename: string, content: string, type: string): void {
@@ -17,23 +17,6 @@ export function downloadFile(filename: string, content: string, type: string): v
 
 function safeName(name: string): string {
   return name.replace(/[^a-z0-9]+/gi, '-').replace(/^-|-$/g, '').toLowerCase() || 'program'
-}
-
-export function exportJson(doc: ProgramDocument): void {
-  downloadFile(
-    `${safeName(doc.name)}-${doc.updatedAt.slice(0, 10)}.json`,
-    JSON.stringify(doc, null, 2),
-    'application/json',
-  )
-}
-
-export async function importJson(file: File): Promise<ProgramDocument> {
-  const text = await file.text()
-  const parsed = JSON.parse(text)
-  if (!parsed || !Array.isArray(parsed.bookings) || !Array.isArray(parsed.blocks)) {
-    throw new Error('That file does not look like a saved program.')
-  }
-  return parsed as ProgramDocument
 }
 
 /**
@@ -75,6 +58,8 @@ export function exportCsv(
   venues: Map<string, { name: string }>,
   staff: Map<string, { name: string }>,
 ): void {
+  const site = SITES.find((s) => s.id === doc.site)?.short ?? 'Woodhouse'
+
   const header = [
     'Date', 'Day', 'School', 'Year level', 'Package', 'Building',
     'Group', 'Start', 'End', 'Duration (min)', 'Activity', 'Delivery',
@@ -116,7 +101,11 @@ export function exportCsv(
   }
 
   const csv = [header, ...rows].map((row) => row.map(csvCell).join(',')).join('\r\n')
-  downloadFile(`${safeName(doc.name)}-schedule.csv`, csv, 'text/csv;charset=utf-8')
+  downloadFile(
+    `${safeName(site)}-schedule-${new Date().toISOString().slice(0, 10)}.csv`,
+    csv,
+    'text/csv;charset=utf-8',
+  )
 }
 
 /** Header line matching the existing sheets: "School - Year - 45est / Package - Building". */

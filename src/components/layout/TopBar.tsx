@@ -1,10 +1,12 @@
-import { useRef, useState } from 'react'
+import { useState } from 'react'
 import type { Site } from '@/types'
 import { SITES } from '@/types'
 import type { Page } from '@/store/useStore'
 import type { Prefs } from '@/store/persist'
+import type { SyncState } from '@/store/sync'
 import { ViewMenu } from './ViewMenu'
-import { Button, IconButton, Input, Select, cx } from '@/components/ui/primitives'
+import { SyncBadge } from './SyncBadge'
+import { Button, IconButton, cx } from '@/components/ui/primitives'
 
 const PAGES: { id: Page; label: string }[] = [
   { id: 'plan', label: 'Plan' },
@@ -15,12 +17,10 @@ const PAGES: { id: Page; label: string }[] = [
 ]
 
 export function TopBar({
-  documentName, onRename, site, onSite, page, onPage, prefs, onPrefs,
+  site, onSite, page, onPage, prefs, onPrefs,
   canUndo, canRedo, onUndo, onRedo,
-  onExportJson, onExportCsv, onImport, onPrint, onNew, issueCount,
+  onExportCsv, onPrint, onStartFresh, onLoadSample, issueCount, sync, onRetrySync,
 }: {
-  documentName: string
-  onRename: (name: string) => void
   site: Site
   onSite: (site: Site) => void
   page: Page
@@ -31,19 +31,21 @@ export function TopBar({
   canRedo: boolean
   onUndo: () => void
   onRedo: () => void
-  onExportJson: () => void
   onExportCsv: () => void
-  onImport: (file: File) => void
   onPrint: () => void
-  onNew: () => void
+  onStartFresh: () => void
+  onLoadSample: () => void
   issueCount: number
+  sync: SyncState
+  onRetrySync: () => void
 }) {
-  const fileRef = useRef<HTMLInputElement>(null)
   const [menuOpen, setMenuOpen] = useState(false)
   const showsGrid = page === 'plan' || page === 'site'
 
   return (
     <header className="no-print flex h-[52px] shrink-0 items-center gap-3 border-b border-[var(--line)] bg-[var(--surface)] px-3">
+      {/* One shared plan per deployment, so there is no document to name — the
+          only thing to choose here is which site you're looking at. */}
       <div className="flex min-w-0 items-center gap-2">
         <span
           aria-hidden
@@ -51,25 +53,30 @@ export function TopBar({
         >
           W
         </span>
-        <div className="flex min-w-0 flex-col">
-          <Input
-            value={documentName}
-            onChange={(event) => onRename(event.target.value)}
-            aria-label="Program name"
-            className="h-6 w-44 border-transparent bg-transparent px-1 text-[13px] font-semibold hover:border-[var(--line)] focus:border-[var(--brand-soft)]"
-          />
-          <Select
+        <div className="relative flex min-w-0 items-center">
+          <select
             value={site}
             onChange={(event) => onSite(event.target.value as Site)}
             aria-label="Site"
-            className="h-5 w-44 border-transparent bg-transparent px-1 text-[11px] text-[var(--ink-faint)] hover:border-[var(--line)]"
+            className={cx(
+              'h-8 min-w-0 appearance-none rounded-md border border-transparent bg-transparent',
+              'py-0 pr-6 pl-2 text-[14px] font-semibold text-[var(--ink)]',
+              'transition-colors hover:border-[var(--line)] hover:bg-[var(--surface-sunk)]',
+              'focus:border-[var(--brand-soft)] focus:outline-none',
+            )}
           >
             {SITES.map((option) => (
               <option key={option.id} value={option.id}>
                 {option.name}
               </option>
             ))}
-          </Select>
+          </select>
+          <span
+            aria-hidden
+            className="pointer-events-none absolute right-2 text-[9px] text-[var(--ink-faint)]"
+          >
+            &#9662;
+          </span>
         </div>
       </div>
 
@@ -93,6 +100,8 @@ export function TopBar({
       </nav>
 
       <div className="ml-auto flex items-center gap-1.5">
+        <SyncBadge sync={sync} onRetry={onRetrySync} />
+
         {issueCount > 0 && showsGrid && (
           <span
             className="tnum hidden items-center gap-1 rounded-full bg-[var(--danger-tint)] px-2 py-0.5 text-[11px] font-semibold text-[var(--danger)] lg:inline-flex"
@@ -131,7 +140,7 @@ export function TopBar({
 
         <div className="relative">
           <Button size="sm" onClick={() => setMenuOpen((open) => !open)} aria-expanded={menuOpen}>
-            File
+            Program
             <span aria-hidden className="text-[9px] opacity-60">
               &#9662;
             </span>
@@ -139,45 +148,30 @@ export function TopBar({
           {menuOpen && (
             <>
               <div className="fixed inset-0 z-40" onClick={() => setMenuOpen(false)} aria-hidden />
-              <div className="absolute right-0 z-50 mt-1 w-[272px] overflow-hidden rounded-lg border border-[var(--line)] bg-[var(--surface)] py-1 shadow-[var(--shadow-lg)]">
-                <MenuItem onClick={() => { setMenuOpen(false); onNew() }}>New program…</MenuItem>
-                <div className="my-1 h-px bg-[var(--line)]" />
-                <MenuItem onClick={() => { setMenuOpen(false); onExportJson() }}>
-                  Back up to a file (.json)
-                </MenuItem>
-                <MenuItem onClick={() => { setMenuOpen(false); fileRef.current?.click() }}>
-                  Restore from a file…
-                </MenuItem>
+              <div className="absolute right-0 z-50 mt-1 w-[280px] overflow-hidden rounded-lg border border-[var(--line)] bg-[var(--surface)] py-1 shadow-[var(--shadow-lg)]">
                 <MenuItem onClick={() => { setMenuOpen(false); onExportCsv() }}>
                   Export schedule (.csv)
                 </MenuItem>
+                <div className="my-1 h-px bg-[var(--line)]" />
+                <MenuItem onClick={() => { setMenuOpen(false); onLoadSample() }}>
+                  Load the sample week
+                </MenuItem>
+                <MenuItem onClick={() => { setMenuOpen(false); onStartFresh() }}>
+                  Start fresh…
+                </MenuItem>
 
-                {/* There is no server behind this app, so the files are not
-                    optional housekeeping — they are the only copy that leaves
-                    this browser. Worth saying plainly, right where the
-                    question comes up. */}
+                {/* The plan is shared now. Saying where it lives is the answer
+                    to "will the others see this?", which is the first thing
+                    anyone asks of an app like this. */}
                 <p className="mt-1 border-t border-[var(--line)] px-3 pt-2 pb-1 text-[11px] leading-snug text-[var(--ink-soft)]">
-                  <span className="font-medium text-[var(--ink)]">Saved in this browser.</span>{' '}
-                  There's no shared database — the program lives in this browser's storage on this
-                  computer, and saves as you type. Back up to a file to move it to another machine,
-                  send it to someone, or keep a copy safe from cleared site data.
+                  <span className="font-medium text-[var(--ink)]">Saved for everyone.</span> Both
+                  sites share one plan, kept in the database behind this site and saved as you
+                  type. Open it on any computer and you're looking at the same thing.
                 </p>
               </div>
             </>
           )}
         </div>
-
-        <input
-          ref={fileRef}
-          type="file"
-          accept="application/json,.json"
-          hidden
-          onChange={(event) => {
-            const file = event.target.files?.[0]
-            if (file) onImport(file)
-            event.target.value = ''
-          }}
-        />
       </div>
     </header>
   )

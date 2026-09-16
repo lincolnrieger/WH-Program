@@ -8,6 +8,9 @@ import { SEED_ACTIVITIES } from './activities'
 /**
  * A starter week modelled on the real holistic sheets: several schools on site
  * at once, overlapping stays, different package tiers and group counts.
+ *
+ * Dated from the Monday of the current week, so it always lands on a week you
+ * can actually see rather than somewhere in 2024.
  */
 export function createSeedDocument(): ProgramDocument {
   const monday = startOfWeek(toISODate(new Date()))
@@ -101,7 +104,6 @@ export function createSeedDocument(): ProgramDocument {
 
   return {
     version: DOCUMENT_VERSION,
-    name: 'Sample week',
     site: 'woodhouse',
     bookings,
     blocks: [...blocks, ...afternoon],
