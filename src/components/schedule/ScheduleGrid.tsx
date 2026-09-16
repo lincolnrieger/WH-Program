@@ -1,5 +1,6 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import type { Activity, Block, Booking, Issue } from '@/types'
+import { staffLabel } from '@/lib/exportImport'
 import { layoutBlocks } from '@/lib/layout'
 import { formatTimeFull } from '@/lib/time'
 import { blockPalette } from '@/lib/colour'
@@ -170,7 +171,13 @@ export function ScheduleGrid({
               highlighted={highlightIds.includes(block.id)}
               issues={issuesByBlock.get(block.id) ?? []}
               venueName={showDetail && block.venueId ? venueNames.get(block.venueId) : undefined}
-              staffNames={showDetail ? block.staffIds.map((id) => staffNames.get(id) ?? id) : []}
+              staffNames={
+                showDetail
+                  ? block.staffIds.map((id) =>
+                      staffLabel(block, id, staffNames.get(id) ?? id),
+                    )
+                  : []
+              }
               onSelect={onSelect}
             />
           )

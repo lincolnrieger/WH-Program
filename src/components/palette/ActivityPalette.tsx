@@ -1,6 +1,5 @@
-import { useMemo, useState, type PointerEvent as ReactPointerEvent } from 'react'
-import type { Activity, ActivityCategory, Site } from '@/types'
-import { CATEGORY_LABELS } from '@/types'
+import { useMemo, type PointerEvent as ReactPointerEvent } from 'react'
+import type { Activity, Site } from '@/types'
 import { ROUTINES } from '@/data/activities'
 import { blockPalette } from '@/lib/colour'
 import { formatDuration } from '@/lib/time'
@@ -27,32 +26,23 @@ export interface ActivityPaletteProps {
 export function ActivityPalette({
   activities, site, dark, search, onSearch, onQuickAdd, canAdd,
 }: ActivityPaletteProps) {
-  const [category, setCategory] = useState<ActivityCategory | 'all'>('all')
-
   const query = search.trim().toLowerCase()
 
   const filtered = useMemo(() => {
     return activities.filter((activity) => {
       if (!activity.sites.includes(site)) return false
-      if (category !== 'all' && activity.category !== category) return false
       if (!query) return true
       return (
         activity.name.toLowerCase().includes(query) ||
-        CATEGORY_LABELS[activity.category].toLowerCase().includes(query) ||
         (activity.notes?.toLowerCase().includes(query) ?? false)
       )
     })
-  }, [activities, site, category, query])
+  }, [activities, site, query])
 
   const routines = useMemo(
     () => ROUTINES.filter((r) => !query || r.title.toLowerCase().includes(query)),
     [query],
   )
-
-  const categories = useMemo(() => {
-    const present = new Set(activities.filter((a) => a.sites.includes(site)).map((a) => a.category))
-    return (Object.keys(CATEGORY_LABELS) as ActivityCategory[]).filter((c) => present.has(c))
-  }, [activities, site])
 
   return (
     <div className="flex h-full min-h-0 flex-col">
@@ -63,16 +53,6 @@ export function ActivityPalette({
           placeholder="Search activities…"
           aria-label="Search activities"
         />
-        <div className="mt-2 flex flex-wrap gap-1">
-          <CategoryPill active={category === 'all'} onClick={() => setCategory('all')}>
-            All
-          </CategoryPill>
-          {categories.map((key) => (
-            <CategoryPill key={key} active={category === key} onClick={() => setCategory(key)}>
-              {CATEGORY_LABELS[key]}
-            </CategoryPill>
-          ))}
-        </div>
       </div>
 
       <div className="min-h-0 flex-1 overflow-y-auto pb-4">
@@ -154,29 +134,6 @@ function beginDrag(event: ReactPointerEvent<HTMLElement>, input: BeginDragInput)
     pointer: { x: event.clientX, y: event.clientY },
   })
   document.body.classList.add('is-dragging')
-}
-
-function CategoryPill({
-  children, active, onClick,
-}: {
-  children: React.ReactNode
-  active: boolean
-  onClick: () => void
-}) {
-  return (
-    <button
-      type="button"
-      onClick={onClick}
-      className={cx(
-        'rounded-full border px-2 py-0.5 text-[11px] font-medium transition-colors',
-        active
-          ? 'border-[var(--brand)] bg-[var(--brand)] text-[var(--brand-ink)]'
-          : 'border-[var(--line)] bg-[var(--surface)] text-[var(--ink-soft)] hover:bg-[var(--surface-sunk)]',
-      )}
-    >
-      {children}
-    </button>
-  )
 }
 
 function PaletteItem({

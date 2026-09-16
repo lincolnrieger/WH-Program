@@ -4,7 +4,10 @@ import { PACKAGE_LABELS } from '@/types'
 import { BUILDINGS } from '@/data/venues'
 import { uid } from '@/lib/id'
 import { Modal } from '@/components/ui/Modal'
-import { Button, Field, IconButton, Input, Select } from '@/components/ui/primitives'
+import { Button, Field, IconButton, Input, Select, cx } from '@/components/ui/primitives'
+
+/** Name, student count, remove — shared by the header row and each group row. */
+const GROUP_ROW = 'grid grid-cols-[minmax(0,1fr)_76px_28px] items-center gap-1.5'
 
 /** Create or edit a school's stay: dates, package, building and groups. */
 export function BookingDialog({
@@ -132,10 +135,19 @@ export function BookingDialog({
 
         <Field label="Groups" hint="Each group becomes a column on the grid.">
           <div className="space-y-1.5">
+            {/* A grid rather than a flex row: two inputs that both want full
+                width end up fighting over it, and the name box collapses to a
+                square that reads as a stray control. */}
+            <div className={cx(GROUP_ROW, 'text-[10.5px] tracking-wide text-[var(--ink-faint)] uppercase')}>
+              <span>Name</span>
+              <span>Students</span>
+              <span />
+            </div>
             {draft.groups.map((group, index) => (
-              <div key={group.id} className="flex items-center gap-1.5">
+              <div key={group.id} className={GROUP_ROW}>
                 <Input
                   value={group.name}
+                  aria-label={`Group ${index + 1} name`}
                   onChange={(event) =>
                     set(
                       'groups',
@@ -146,10 +158,12 @@ export function BookingDialog({
                   }
                 />
                 <Input
-                  className="w-20 shrink-0"
+                  className="tnum text-center"
                   type="number"
+                  inputMode="numeric"
                   min={0}
-                  placeholder="size"
+                  aria-label={`${group.name} size`}
+                  placeholder="—"
                   value={group.size ?? ''}
                   onChange={(event) =>
                     set(
@@ -171,7 +185,6 @@ export function BookingDialog({
                 >
                   &#10005;
                 </IconButton>
-                <span className="sr-only">Group {index + 1}</span>
               </div>
             ))}
             <Button

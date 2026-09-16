@@ -12,6 +12,7 @@ import { useDragController } from '@/hooks/useDragController'
 import { useKeyboardShortcuts } from '@/hooks/useKeyboardShortcuts'
 import { exportCsv, exportJson, importJson } from '@/lib/exportImport'
 import { suggestSlots } from '@/lib/rotation'
+import { addDays, startOfWeek } from '@/lib/time'
 import { TopBar } from '@/components/layout/TopBar'
 import { WeekBar } from '@/components/layout/WeekBar'
 import { Sidebar } from '@/components/layout/Sidebar'
@@ -213,14 +214,23 @@ export default function App() {
     }
   }, [])
 
-  // What the print sheet will contain, given the chosen scope.
+  // What the print sheet will contain, given the chosen scope. The two site
+  // scopes hand over every booking and let the sheet decide — it already knows
+  // which week it is drawing.
   const printBookings = useMemo(() => {
-    if (printOptions.scope === 'booking') return booking ? [booking] : []
+    if (printOptions.scope === 'booking' || printOptions.scope === 'booking-day') {
+      return booking ? [booking] : []
+    }
     if (printOptions.scope === 'site-day') {
       return siteBookings.filter((b) => date >= b.startDate && date <= b.endDate)
     }
-    return siteBookings.filter((b) => b.endDate >= date)
+    return siteBookings
   }, [printOptions.scope, booking, siteBookings, date])
+
+  const weekBounds = useMemo(() => {
+    const start = startOfWeek(date)
+    return { start, end: addDays(start, 6) }
+  }, [date])
 
   const showsGrid = page === 'plan' || page === 'site'
   const siteName = SITES.find((s) => s.id === doc.site)?.short ?? 'Woodhouse'
@@ -341,6 +351,7 @@ export default function App() {
                 const created = useStore.getState().doc.bookings.find((b) => b.id === id)
                 if (created) setEditingBooking(created)
               }}
+              onDateChange={(next) => useStore.getState().setActiveDate(next)}
             />
           )}
 
@@ -460,7 +471,9 @@ export default function App() {
           counts={{
             booking: booking ? 1 : 0,
             siteDay: siteBookings.filter((b) => date >= b.startDate && date <= b.endDate).length,
-            siteWeek: siteBookings.filter((b) => b.endDate >= date).length,
+            siteWeek: siteBookings.filter(
+              (b) => b.startDate <= weekBounds.end && b.endDate >= weekBounds.start,
+            ).length,
           }}
         />
       )}
@@ -469,12 +482,12 @@ export default function App() {
         <RotationDialog
           booking={booking}
           date={date}
-          existingBlocks={doc.blocks.filter((b) => b.bookingId === booking.id && b.date === date)}
+          blocks={doc.blocks.filter((b) => b.bookingId === booking.id)}
           activities={paletteActivities}
           dayStartMin={prefs.dayStartMin}
           dayEndMin={prefs.dayEndMin}
           onGenerate={(input) =>
-            useStore.getState().generateRotation({ bookingId: booking.id, date, ...input })
+            useStore.getState().generateRotation({ bookingId: booking.id, ...input })
           }
           onClose={() => setRotationOpen(false)}
         />

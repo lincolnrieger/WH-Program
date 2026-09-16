@@ -8,8 +8,9 @@ export interface RotationSlot {
 
 export interface RotationRequest {
   booking: Booking
-  date: string
-  /** Time slots to fill, in order. */
+  /** Days to lay the rotation over, in order. */
+  dates: string[]
+  /** Time slots to fill on each day, in order. */
   slots: RotationSlot[]
   /** Activities to rotate through. One per group per slot. */
   activityIds: string[]
@@ -17,6 +18,12 @@ export interface RotationRequest {
   groupIds: string[]
   delivery: Delivery
   activities: Map<string, Activity>
+  /**
+   * Carry the rotation on across days rather than restarting it each morning,
+   * so a group that did abseiling in slot 1 on Monday doesn't do it again in
+   * slot 1 on Tuesday. On by default.
+   */
+  continueAcrossDays?: boolean
 }
 
 /**
@@ -27,46 +34,90 @@ export interface RotationRequest {
  * group *g* takes activity `(slot + g) mod N` in each slot. When there are more
  * activities than groups the extra activities simply go unused for that day;
  * when there are fewer, the short groups get an empty slot rather than a clash.
+ *
+ * Over several days the slot counter keeps running, so day two picks up where
+ * day one left off and a long stay works through the whole activity list.
  */
 export function buildRotation(request: RotationRequest): Block[] {
-  const { booking, date, slots, activityIds, groupIds, delivery, activities } = request
-  if (slots.length === 0 || groupIds.length === 0 || activityIds.length === 0) return []
+  const {
+    booking, dates, slots, activityIds, groupIds, delivery, activities,
+    continueAcrossDays = true,
+  } = request
+  if (dates.length === 0 || slots.length === 0) return []
+  if (groupIds.length === 0 || activityIds.length === 0) return []
 
   const blocks: Block[] = []
 
-  slots.forEach((slot, slotIndex) => {
-    groupIds.forEach((groupId, groupIndex) => {
-      // Offset by group so each column sees a different activity in this slot.
-      const activityIndex = (slotIndex + groupIndex) % activityIds.length
-      // With more groups than activities, the surplus groups would double up —
-      // leave them empty instead of creating a guaranteed clash.
-      if (groupIndex >= activityIds.length) return
+  dates.forEach((date, dayIndex) => {
+    slots.forEach((slot, slotIndex) => {
+      const sequence = continueAcrossDays ? dayIndex * slots.length + slotIndex : slotIndex
 
-      const activityId = activityIds[activityIndex]
-      const activity = activities.get(activityId)
-      if (!activity) return
+      groupIds.forEach((groupId, groupIndex) => {
+        // Offset by group so each column sees a different activity in this slot.
+        const activityIndex = (sequence + groupIndex) % activityIds.length
+        // With more groups than activities, the surplus groups would double up —
+        // leave them empty instead of creating a guaranteed clash.
+        if (groupIndex >= activityIds.length) return
 
-      // Run for as long as the activity normally takes, or the slot, whichever
-      // is shorter — a two-hour hole in the day is not a two-hour session.
-      const endMin = Math.min(slot.endMin, slot.startMin + activity.defaultDurationMin)
+        const activityId = activityIds[activityIndex]
+        const activity = activities.get(activityId)
+        if (!activity) return
 
-      blocks.push({
-        id: uid('blk'),
-        bookingId: booking.id,
-        date,
-        startMin: slot.startMin,
-        endMin,
-        groupIds: [groupId],
-        kind: 'activity',
-        activityId,
-        delivery: activity.deliveries.includes(delivery) ? delivery : activity.deliveries[0],
-        staffIds: [],
-        venueId: activity.venueIds[0],
+        // Run for as long as the activity normally takes, or the slot, whichever
+        // is shorter — a two-hour hole in the day is not a two-hour session.
+        const endMin = Math.min(slot.endMin, slot.startMin + activity.defaultDurationMin)
+
+        blocks.push({
+          id: uid('blk'),
+          bookingId: booking.id,
+          date,
+          startMin: slot.startMin,
+          endMin,
+          groupIds: [groupId],
+          kind: 'activity',
+          activityId,
+          delivery: activity.deliveries.includes(delivery) ? delivery : activity.deliveries[0],
+          staffIds: [],
+          venueId: activity.venueIds[0],
+        })
       })
     })
   })
 
   return blocks
+}
+
+/**
+ * What the rotation will put in each cell, without building any blocks.
+ *
+ * The dialog previews this so it is obvious what is about to be created — and
+ * so a short activity list shows up as an empty cell before it becomes a hole
+ * in the day.
+ */
+export function rotationMatrix(input: {
+  dates: string[]
+  slots: RotationSlot[]
+  activityIds: string[]
+  groupIds: string[]
+  continueAcrossDays?: boolean
+}): { date: string; slot: RotationSlot; activityIds: (string | null)[] }[] {
+  const { dates, slots, activityIds, groupIds, continueAcrossDays = true } = input
+  if (activityIds.length === 0) return []
+
+  return dates.flatMap((date, dayIndex) =>
+    slots.map((slot, slotIndex) => {
+      const sequence = continueAcrossDays ? dayIndex * slots.length + slotIndex : slotIndex
+      return {
+        date,
+        slot,
+        activityIds: groupIds.map((_, groupIndex) =>
+          groupIndex >= activityIds.length
+            ? null
+            : activityIds[(sequence + groupIndex) % activityIds.length],
+        ),
+      }
+    }),
+  )
 }
 
 /**

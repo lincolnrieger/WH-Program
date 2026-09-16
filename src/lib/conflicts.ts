@@ -3,7 +3,15 @@ import type {
 } from '@/types'
 import { COMPETENCY_LABELS, QUALIFIED_LEVELS } from '@/types'
 import { competencyFor } from '@/data/resolve'
-import { formatRange, overlapMinutes, rangesOverlap } from './time'
+import { formatDuration, formatRange, formatTime, overlapMinutes, rangesOverlap } from './time'
+
+/**
+ * Fatigue rule: nobody works more than this without a proper break, and the
+ * break itself has to be at least this long. Set-up and pack-down time is
+ * still work, so it is subtracted from any gap before the gap counts.
+ */
+export const MAX_SHIFT_MIN = 5 * 60
+export const MIN_BREAK_MIN = 30
 
 export interface ConflictContext {
   blocks: Block[]
@@ -63,6 +71,7 @@ export function findIssues(ctx: ConflictContext): Issue[] {
     checkStaffDoubleBooking(date, items, ctx, issues)
     checkStaffQualifications(date, items, ctx, issues)
     checkStaffingLevels(date, items, issues)
+    checkStaffBreaks(date, items, ctx, issues)
     checkCapacity(date, items, issues)
     checkTurnaround(date, items, issues)
   }
@@ -218,6 +227,8 @@ function checkStaffQualifications(date: string, items: Named[], ctx: ConflictCon
     for (const staffId of item.block.staffIds) {
       const person = ctx.staff.get(staffId)
       if (!person) continue
+      // Being untrained is the whole point of a training shift.
+      if (item.block.trainingStaffIds?.includes(staffId)) continue
 
       const entry = competencyFor(person, item.activity, site, ctx.overrides)
       if (QUALIFIED_LEVELS.includes(entry.level)) continue
@@ -244,7 +255,9 @@ function checkStaffingLevels(date: string, items: Named[], out: Issue[]): void {
   for (const item of items) {
     const needed = item.activity?.minStaff ?? 0
     if (!item.activity || item.block.delivery !== 'staff' || needed === 0) continue
-    const rostered = item.block.staffIds.length
+    // Trainees are supernumerary — they don't fill the roster on their own.
+    const trainees = item.block.trainingStaffIds ?? []
+    const rostered = item.block.staffIds.filter((id) => !trainees.includes(id)).length
     if (rostered >= needed) continue
 
     out.push({
@@ -253,12 +266,80 @@ function checkStaffingLevels(date: string, items: Named[], out: Issue[]): void {
       rule: 'understaffed',
       message:
         rostered === 0
-          ? `${item.activity.name} has no staff assigned (needs ${needed}).`
-          : `${item.activity.name} has ${rostered} of ${needed} staff assigned.`,
+          ? `${item.activity.name} has no staff assigned (needs ${needed}${
+              trainees.length > 0 ? `, not counting ${trainees.length} in training` : ''
+            }).`
+          : `${item.activity.name} has ${rostered} of ${needed} staff assigned${
+              trainees.length > 0 ? ` (${trainees.length} more in training)` : ''
+            }.`,
       blockIds: [item.block.id],
       date,
       bookingId: item.block.bookingId,
     })
+  }
+}
+
+/**
+ * Nobody works more than five hours straight without a 30-minute break.
+ *
+ * A gap between two sessions is only a break to the extent it isn't spent
+ * packing the first one down and setting the next one up — 40 minutes between
+ * two activities that need 15 minutes of pack-down and 10 of set-up is a
+ * 15-minute break, not a 40-minute one, so the two sessions still count as one
+ * continuous shift.
+ */
+function checkStaffBreaks(date: string, items: Named[], ctx: ConflictContext, out: Issue[]): void {
+  const byStaff = new Map<string, Named[]>()
+  for (const item of items) {
+    for (const staffId of item.block.staffIds) {
+      const list = byStaff.get(staffId)
+      if (list) list.push(item)
+      else byStaff.set(staffId, [item])
+    }
+  }
+
+  for (const [staffId, rostered] of byStaff) {
+    const sorted = [...rostered].sort((a, b) => a.block.startMin - b.block.startMin)
+
+    let shift = { start: sorted[0].block.startMin, end: sorted[0].block.endMin, last: sorted[0] }
+
+    const close = (finished: typeof shift) => {
+      const worked = finished.end - finished.start
+      if (worked <= MAX_SHIFT_MIN) return
+      const person = ctx.staff.get(staffId)?.name ?? staffId
+      out.push({
+        id: `no-break:${staffId}:${date}:${finished.start}`,
+        severity: 'error',
+        rule: 'staff-no-break',
+        message: `${person} works ${formatDuration(worked)} straight from ${formatTime(
+          finished.start,
+        )} with no ${MIN_BREAK_MIN}-minute break (set-up and pack-down don't count).`,
+        blockIds: rostered
+          .filter((i) => i.block.startMin < finished.end && i.block.endMin > finished.start)
+          .map((i) => i.block.id),
+        date,
+      })
+    }
+
+    for (const item of sorted.slice(1)) {
+      const gap = item.block.startMin - shift.end
+      // The turnaround either side of the gap is still work.
+      const turnaround =
+        (shift.last.activity?.packdownMin ?? 0) + (item.activity?.setupMin ?? 0)
+      const realBreak = gap - turnaround
+
+      if (realBreak >= MIN_BREAK_MIN) {
+        close(shift)
+        shift = { start: item.block.startMin, end: item.block.endMin, last: item }
+      } else {
+        shift = {
+          start: shift.start,
+          end: Math.max(shift.end, item.block.endMin),
+          last: item.block.endMin >= shift.end ? item : shift.last,
+        }
+      }
+    }
+    close(shift)
   }
 }
 
@@ -379,7 +460,14 @@ export function availableStaff(
   block: Block,
   ctx: ConflictContext,
   site: Site,
-): { person: StaffMember; level: CompetencyLevel; qualified: boolean; busy: boolean }[] {
+): {
+  person: StaffMember
+  level: CompetencyLevel
+  qualified: boolean
+  busy: boolean
+  /** Minutes already worked that day without a break, if this block is added. */
+  shiftMin: number
+}[] {
   const activity = block.activityId ? ctx.activities.get(block.activityId) : undefined
 
   const busyIds = new Set<string>()
@@ -398,6 +486,7 @@ export function availableStaff(
         level: entry?.level ?? 'unknown',
         qualified: entry ? QUALIFIED_LEVELS.includes(entry.level) : false,
         busy: busyIds.has(person.id),
+        shiftMin: shiftLengthWith(person.id, block, ctx),
       }
     })
     .sort((a, b) => {
@@ -405,6 +494,51 @@ export function availableStaff(
       if (a.busy !== b.busy) return a.busy ? 1 : -1
       return a.person.name.localeCompare(b.person.name)
     })
+}
+
+/**
+ * How long this person's unbroken shift would be if they were put on `block`.
+ *
+ * Used to grey out a pick in the inspector before the roster is committed,
+ * rather than only flagging it afterwards.
+ */
+export function shiftLengthWith(staffId: string, block: Block, ctx: ConflictContext): number {
+  const spans = ctx.blocks
+    .filter(
+      (other) =>
+        other.date === block.date && other.id !== block.id && other.staffIds.includes(staffId),
+    )
+    .map((other) => ({
+      start: other.startMin,
+      end: other.endMin,
+      packdown: other.activityId ? (ctx.activities.get(other.activityId)?.packdownMin ?? 0) : 0,
+      setup: other.activityId ? (ctx.activities.get(other.activityId)?.setupMin ?? 0) : 0,
+    }))
+
+  const activity = block.activityId ? ctx.activities.get(block.activityId) : undefined
+  spans.push({
+    start: block.startMin,
+    end: block.endMin,
+    packdown: activity?.packdownMin ?? 0,
+    setup: activity?.setupMin ?? 0,
+  })
+  spans.sort((a, b) => a.start - b.start)
+
+  let longest = 0
+  let start = spans[0].start
+  let end = spans[0].end
+  let packdown = spans[0].packdown
+
+  for (const span of spans.slice(1)) {
+    const realBreak = span.start - end - (packdown + span.setup)
+    if (realBreak >= MIN_BREAK_MIN) {
+      longest = Math.max(longest, end - start)
+      start = span.start
+    }
+    if (span.end >= end) packdown = span.packdown
+    end = Math.max(end, span.end)
+  }
+  return Math.max(longest, end - start)
 }
 
 export { overlapMinutes }

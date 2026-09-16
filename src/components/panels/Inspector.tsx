@@ -1,7 +1,7 @@
 import { useMemo, useState } from 'react'
 import type { Activity, Block, Booking, Issue, Site, Venue } from '@/types'
 import { BLOCK_KIND_LABELS, COMPETENCY_COLOURS, DELIVERY_LABELS } from '@/types'
-import { availableStaff } from '@/lib/conflicts'
+import { MAX_SHIFT_MIN, availableStaff } from '@/lib/conflicts'
 import { formatDuration, formatTimeFull, parseTime } from '@/lib/time'
 import { blockTitle } from '@/lib/exportImport'
 import { buildConflictContext, useStore } from '@/store/useStore'
@@ -338,35 +338,84 @@ function StaffPicker({ block, site }: { block: Block; site: Site }) {
     [block, doc, site],
   )
 
-  const assigned = options.filter((option) => block.staffIds.includes(option.person.id))
+  const byId = useMemo(() => new Map(options.map((o) => [o.person.id, o])), [options])
+  const training = block.trainingStaffIds ?? []
   const shown = expanded ? options : options.filter((o) => o.qualified && !o.busy).slice(0, 12)
 
   function toggle(id: string) {
-    const next = block.staffIds.includes(id)
-      ? block.staffIds.filter((s) => s !== id)
-      : [...block.staffIds, id]
-    updateBlock(block.id, { staffIds: next })
+    const on = block.staffIds.includes(id)
+    updateBlock(block.id, {
+      staffIds: on ? block.staffIds.filter((s) => s !== id) : [...block.staffIds, id],
+      // Dropping someone drops their training flag with them.
+      trainingStaffIds: on ? training.filter((s) => s !== id) : training,
+    })
+  }
+
+  function toggleTraining(id: string) {
+    const next = training.includes(id) ? training.filter((s) => s !== id) : [...training, id]
+    updateBlock(block.id, { trainingStaffIds: next.length > 0 ? next : undefined })
   }
 
   return (
     <Field label="Staff" hint="Green means signed off for this activity at this site.">
-      <div className="flex flex-wrap gap-1">
-        {assigned.map(({ person, qualified, busy }) => (
-          <Chip
-            key={person.id}
-            active
-            colour={qualified ? COMPETENCY_COLOURS.can_run : COMPETENCY_COLOURS.no}
-            onClick={() => toggle(person.id)}
-            title={busy ? 'Also rostered elsewhere at this time' : undefined}
-          >
-            {person.name}
-            {busy ? ' ⚠' : ''}
-          </Chip>
-        ))}
-      </div>
+      {block.staffIds.length > 0 && (
+        <ul className="mb-1.5 divide-y divide-[var(--line)] rounded-md border border-[var(--line)]">
+          {block.staffIds.map((id) => {
+            const option = byId.get(id)
+            const name = option?.person.name ?? id
+            const onTraining = training.includes(id)
+            const longShift = (option?.shiftMin ?? 0) > MAX_SHIFT_MIN
+            return (
+              <li key={id} className="flex items-center gap-1.5 px-1.5 py-1">
+                <span
+                  aria-hidden
+                  className="h-2 w-2 shrink-0 rounded-full"
+                  style={{
+                    background: option?.qualified
+                      ? COMPETENCY_COLOURS.can_run
+                      : onTraining
+                        ? COMPETENCY_COLOURS.in_training
+                        : COMPETENCY_COLOURS.no,
+                  }}
+                />
+                <span className="min-w-0 flex-1 truncate text-[12px]">
+                  {name}
+                  {onTraining && <span className="ml-1 font-semibold text-[var(--warn)]">#</span>}
+                </span>
 
-      <div className="mt-1.5 max-h-40 overflow-y-auto rounded-md border border-[var(--line)]">
-        {shown.map(({ person, qualified, busy }) => (
+                {longShift && (
+                  <span
+                    title={`Would be on for ${formatDuration(option?.shiftMin ?? 0)} without a 30-minute break`}
+                    className="tnum shrink-0 text-[10px] font-medium text-[var(--danger)]"
+                  >
+                    {formatDuration(option?.shiftMin ?? 0)}
+                  </span>
+                )}
+
+                <label
+                  className="flex shrink-0 cursor-pointer items-center gap-1 rounded px-1 py-0.5 text-[10.5px] text-[var(--ink-faint)] hover:bg-[var(--surface-sunk)]"
+                  title="On this session to be trained — prints as “#” and doesn’t count towards the staffing minimum."
+                >
+                  <input
+                    type="checkbox"
+                    checked={onTraining}
+                    onChange={() => toggleTraining(id)}
+                    className="h-3 w-3 accent-[var(--brand)]"
+                  />
+                  Training
+                </label>
+
+                <IconButton label={`Remove ${name}`} onClick={() => toggle(id)} className="h-5 w-5">
+                  &#10005;
+                </IconButton>
+              </li>
+            )
+          })}
+        </ul>
+      )}
+
+      <div className="max-h-40 overflow-y-auto rounded-md border border-[var(--line)]">
+        {shown.map(({ person, qualified, busy, shiftMin }) => (
           <button
             key={person.id}
             type="button"
@@ -385,6 +434,14 @@ function StaffPicker({ block, site }: { block: Block; site: Site }) {
               }}
             />
             <span className="min-w-0 flex-1 truncate">{person.name}</span>
+            {shiftMin > MAX_SHIFT_MIN && (
+              <span
+                className="shrink-0 text-[10px] text-[var(--danger)]"
+                title={`Adding them makes a ${formatDuration(shiftMin)} shift with no 30-minute break`}
+              >
+                no break
+              </span>
+            )}
             {busy && <span className="shrink-0 text-[10px] text-[var(--warn)]">busy</span>}
           </button>
         ))}

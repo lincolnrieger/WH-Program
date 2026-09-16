@@ -139,18 +139,29 @@ export function TopBar({
           {menuOpen && (
             <>
               <div className="fixed inset-0 z-40" onClick={() => setMenuOpen(false)} aria-hidden />
-              <div className="absolute right-0 z-50 mt-1 w-56 overflow-hidden rounded-lg border border-[var(--line)] bg-[var(--surface)] py-1 shadow-[var(--shadow-lg)]">
+              <div className="absolute right-0 z-50 mt-1 w-[272px] overflow-hidden rounded-lg border border-[var(--line)] bg-[var(--surface)] py-1 shadow-[var(--shadow-lg)]">
                 <MenuItem onClick={() => { setMenuOpen(false); onNew() }}>New program…</MenuItem>
-                <MenuItem onClick={() => { setMenuOpen(false); fileRef.current?.click() }}>
-                  Open saved file…
-                </MenuItem>
                 <div className="my-1 h-px bg-[var(--line)]" />
                 <MenuItem onClick={() => { setMenuOpen(false); onExportJson() }}>
-                  Save to file (.json)
+                  Back up to a file (.json)
+                </MenuItem>
+                <MenuItem onClick={() => { setMenuOpen(false); fileRef.current?.click() }}>
+                  Restore from a file…
                 </MenuItem>
                 <MenuItem onClick={() => { setMenuOpen(false); onExportCsv() }}>
                   Export schedule (.csv)
                 </MenuItem>
+
+                {/* There is no server behind this app, so the files are not
+                    optional housekeeping — they are the only copy that leaves
+                    this browser. Worth saying plainly, right where the
+                    question comes up. */}
+                <p className="mt-1 border-t border-[var(--line)] px-3 pt-2 pb-1 text-[11px] leading-snug text-[var(--ink-soft)]">
+                  <span className="font-medium text-[var(--ink)]">Saved in this browser.</span>{' '}
+                  There's no shared database — the program lives in this browser's storage on this
+                  computer, and saves as you type. Back up to a file to move it to another machine,
+                  send it to someone, or keep a copy safe from cleared site data.
+                </p>
               </div>
             </>
           )}
