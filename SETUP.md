@@ -52,72 +52,75 @@ npm run dev
 ```
 
 Open <http://localhost:5173>. The app loads with an empty plan and the toolbar
-reports **Offline** — there's no database yet, which is the next step. Press
+reports **Offline**, because `npm run dev` on its own is the interface without
+the API behind it — see [Everyday use](#making-a-change) for running both. Press
 <kbd>Ctrl</kbd>+<kbd>C</kbd> in the terminal to stop it.
 
 ---
 
-## 4. Create the database
+## 4. The database
 
-The plan lives in a **Cloudflare D1** database, so everyone on every computer
-sees the same thing. You create it once, and never touch it again.
+**Already done** — `wh-program` exists and `wrangler.jsonc` points at it, so
+there is nothing to do here. This section is for the day you need a second one,
+or the tables get lost.
+
+The plan lives in a **Cloudflare D1** database, which is why everyone on every
+computer sees the same thing. Its tables are defined in
+[`schema.sql`](schema.sql); every statement is `IF NOT EXISTS`, so this is safe
+to re-run at any time and is also how you apply a new table later:
 
 ```bash
-npx wrangler login                 # opens a browser to authorise, once
-npx wrangler d1 create wh-program
+npx wrangler login     # opens a browser to authorise, once per computer
+npm run db:schema      # create or update the tables on the live database
 ```
 
-It prints a block like this:
+To check what's there, in the Cloudflare dashboard under **Storage &
+Databases → D1 → wh-program → Console**:
 
-```
-[[d1_databases]]
-binding = "DB"
-database_name = "wh-program"
-database_id = "a1b2c3d4-...."
+```sql
+SELECT name FROM sqlite_master WHERE type = 'table';
 ```
 
-Open `wrangler.jsonc`. Near the middle there's a commented-out block — remove
-the `//` from those six lines and paste your **`database_id`** in:
+You want `bookings`, `blocks`, `catalogue` and `settings`.
+
+### Setting up a second copy
+
+A staging site, or a fresh deployment somewhere else, needs its own database —
+two Workers pointing at one database would share one plan:
+
+```bash
+npx wrangler d1 create wh-program-staging
+```
+
+Put the `database_name` and `database_id` it prints into `wrangler.jsonc`:
 
 ```jsonc
 "d1_databases": [
   {
     "binding": "DB",
-    "database_name": "wh-program",
-    "database_id": "a1b2c3d4-...."   // <- yours goes here
+    "database_name": "wh-program-staging",
+    "database_id": "a1b2c3d4-...."
   }
 ],
 ```
 
-Keep the trailing comma. Check it's valid before you push:
+Check it before pushing — this is the one thing here that can break a deploy:
 
 ```bash
 npx wrangler deploy --dry-run
 ```
 
-It should list `env.DB (wh-program)   D1 Database` among the bindings.
-
-Then create the tables:
-
-```bash
-npm run db:schema
-```
-
-Commit the change, because Cloudflare builds from what's in GitHub:
-
-```bash
-git add wrangler.jsonc
-git commit -m "Point at the D1 database"
-git push
-```
+It should list `env.DB (wh-program-staging)   D1 Database` among the bindings.
+Then `npm run db:schema` to create its tables, and commit, because Cloudflare
+builds from what's in GitHub.
 
 > The id is not a secret — it only identifies the database, and reaching it
 > still needs your Cloudflare account. It belongs in the repository.
 
-> **Until you do this**, the site still builds, deploys and opens. It just has
-> nowhere to put anything, so it says *Nothing is saving* across the top, with
-> this step spelled out. That's deliberate: a deployment that can't save is
-> better than a deployment that won't build.
+> **With no database bound at all**, the site still builds, deploys and opens.
+> It just has nowhere to put anything, so it says *Nothing is saving* across
+> the top with the fix spelled out. That's deliberate: a deployment that can't
+> save beats a deployment that won't build.
 
 ---
 

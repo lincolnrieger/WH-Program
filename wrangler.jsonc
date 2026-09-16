@@ -14,23 +14,19 @@
 
   // ── The shared plan ───────────────────────────────────────────────────────
   //
-  // Create the database once:
+  // Every booking, session and catalogue edit lives here. The tables are in
+  // schema.sql; `npm run db:schema` creates or updates them.
   //
-  //     npx wrangler d1 create wh-program
-  //
-  // then uncomment the four lines below and paste in the `database_id` it
-  // printed. See SETUP.md step 4.
-  //
-  // Until you do, the site deploys and loads perfectly well — it just has
-  // nowhere to save, and says so.
-  //
-  // "d1_databases": [
-  //   {
-  //     "binding": "DB",
-  //     "database_name": "wh-program",
-  //     "database_id": "paste-the-id-here"
-  //   }
-  // ],
+  // Setting up a *separate* copy of this app (a staging site, say) means its
+  // own database: `npx wrangler d1 create <name>`, then swap both values
+  // below for the ones it prints. See SETUP.md step 4.
+  "d1_databases": [
+    {
+      "binding": "DB",
+      "database_name": "wh-program",
+      "database_id": "256613f8-2dac-41cd-9eac-b9148d9720e2"
+    }
+  ],
 
   "observability": { "enabled": true }
 }
