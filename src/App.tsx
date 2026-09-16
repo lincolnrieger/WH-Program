@@ -15,6 +15,7 @@ import { suggestSlots } from '@/lib/rotation'
 import { addDays, startOfWeek } from '@/lib/time'
 import { TopBar } from '@/components/layout/TopBar'
 import { WeekBar } from '@/components/layout/WeekBar'
+import { SyncNotice } from '@/components/layout/SyncNotice'
 import { Sidebar } from '@/components/layout/Sidebar'
 import { BookingView } from '@/components/schedule/BookingView'
 import { WeekView } from '@/components/week/WeekView'
@@ -300,6 +301,8 @@ export default function App() {
         onLoadSample={() => void loadSample()}
         onStartFresh={() => void startFresh()}
       />
+
+      <SyncNotice sync={sync} onRetry={() => void refresh()} />
 
       {showsGrid && (
         <WeekBar
