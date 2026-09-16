@@ -8,6 +8,10 @@ the things a spreadsheet can't: venue double-bookings across schools, staff
 rostered in two places, activities that shouldn't run at the same time, and
 sessions with nobody qualified assigned.
 
+One shared plan, saved as you type to a database behind the site. Open the same
+URL on any computer and you're looking at the same thing — no files to pass
+around, nothing to remember to save.
+
 - **[SETUP.md](SETUP.md)** — deploy to Cloudflare from GitHub, step by step.
 - **[DATA.md](DATA.md)** — where the activity, venue and staff data comes from,
   and how to change it.
@@ -99,7 +103,10 @@ colours with no staff names on it, ready to hand to the school. Print in
 **landscape** with **background graphics** on so the colours come through.
 
 - **Export CSV** — one row per session, pastes straight back into Excel.
-- **Back up / restore** — JSON, for sharing a plan or keeping a copy.
+
+**Program menu** — *Load the sample week* fills an empty plan with a few
+overlapping school stays so you can see how it all fits together; *Start fresh*
+empties it again. Both change the shared plan, so they ask first.
 
 ## Editing the catalogue
 
@@ -124,18 +131,35 @@ it — **Restore removed** on the Activities page brings them back.
 
 ## Where the data lives
 
-Everything is stored in your browser (`localStorage`) and saves as you type.
-**There is no server and no database**, which means:
+In a **Cloudflare D1 database** behind the site. One deployment holds one shared
+plan, and it saves as you type — open the URL on any computer and you're looking
+at the same thing, with no file to pass around and nothing to remember to save.
 
-- The plan is **per browser, per device**. It does not sync between computers.
-- Clearing site data clears the plan.
-- To share or move a plan, use **File → Back up to a file** and send the `.json`.
+Both sites are in it. Woodhouse and Roonka are a column on a booking rather than
+separate plans, which is what lets the whole-site views see across both, so the
+picker in the toolbar changes what you're looking at, not what you're editing.
 
-So the file menu isn't optional housekeeping — those files are the only copy
-that ever leaves this browser. The same warning is on the File menu itself.
+**Saving is row by row.** The app holds the whole plan in memory — that's what
+undo works on — but each change is diffed against the one before it and only the
+bookings and sessions that actually moved are sent. Two people planning
+different schools at the same time don't overwrite each other. Within one row,
+the last save wins.
 
-Adding real multi-user sync is the natural next step —
-[SETUP.md](SETUP.md#next-step-shared-plans-across-staff) sketches how.
+Every write bumps a revision counter, and each browser checks it every ten
+seconds and whenever you come back to the tab. Someone else's change appears in
+front of you within about ten seconds, without a refresh.
+
+**Losing the connection costs you nothing.** Changes queue up in your browser,
+the toolbar badge turns grey and reads *Offline*, and everything goes out when
+the connection is back — even if you closed the tab in the meantime. The badge
+is the honest answer to "has that saved?": click it to retry straight away.
+
+There's still no login, so put Cloudflare Access in front of the site —
+[SETUP.md](SETUP.md#7-lock-it-down--do-this-one) is four clicks. It covers the
+API as well as the pages.
+
+[SETUP.md](SETUP.md#the-database) has the schema, how to query it and how to
+take a backup.
 
 ## Running it locally
 
@@ -146,11 +170,21 @@ npm install
 npm run dev          # http://localhost:5173
 ```
 
+That's the interface on its own. It works — it just says **Offline** and keeps
+everything in your browser, which is all you need for most interface work. For a
+real database, run the API in a second terminal:
+
+```bash
+npm run db:schema:local   # once, to create the local tables
+npm run dev:api           # Worker + a local D1 on port 8787
+```
+
 Other commands:
 
 ```bash
 npm run build        # typecheck + production build into dist/
-npm run preview      # serve the production build locally
+npm run preview      # build, then serve it exactly as deployed
+npm run db:schema    # create/update the tables on the live database
 npm run deploy       # build and push to Cloudflare
 ```
 
@@ -174,17 +208,22 @@ src/
     conflicts.ts           every scheduling rule
     rotation.ts            builds the Latin square, over one day or a whole stay
     layout.ts              works out where each block sits on the grid
-    exportImport.ts        JSON and CSV
+    exportImport.ts        CSV export and the shared title helpers
+    api.ts                 the wire protocol: ops in, whole state out
   store/
-    useStore.ts            document state, undo/redo, persistence
+    useStore.ts            document state, undo/redo
+    sync.ts                diffs each change into rows and keeps D1 in step
+    persist.ts             local storage: a cache, and the offline queue
     dragStore.ts           drag state + the grid registry
-    persist.ts             localStorage with schema migration
   hooks/
     useDragController.ts   the pointer handlers behind every drag
   components/
     pages/                 Staff, Activities and Venues management
     schedule/ week/        the grid, in both views
     panels/ print/ ui/     inspector, the four print sheets, shared primitives
+worker/
+  index.ts                 the API: reads the plan, applies row-level changes
+schema.sql                 the D1 tables
 scripts/
   generate-staff.py        regenerates staff data from the .xlsx
 ```
@@ -202,3 +241,8 @@ A few decisions worth knowing about:
   already know survives while the text stays legible in both themes.
 - **Undo snapshots the whole document.** A week of blocks is a few hundred
   objects — small enough that snapshotting is simpler and safer than diffing.
+- **The app thinks in documents; the database thinks in rows.** Keeping whole
+  `ProgramDocument`s in memory is what makes undo and every view simple. Saving
+  them whole would mean one person's save silently discarding another's, so
+  `sync.ts` diffs consecutive documents and sends only the rows that changed.
+  One concept each way, and the join between them is forty lines.

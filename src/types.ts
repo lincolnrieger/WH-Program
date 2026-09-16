@@ -277,11 +277,18 @@ export const EMPTY_OVERRIDES: Overrides = {
   hiddenStaffIds: [],
 }
 
-/** Everything the app persists. */
+/**
+ * The whole plan, as the app holds it in memory.
+ *
+ * One deployment holds one plan — there is no document to name or choose, and
+ * the site (Woodhouse or Roonka) is a column on a booking rather than a
+ * separate plan, so the whole-site views can see across both. This shape is
+ * what undo snapshots and what every view reads; the database stores it row by
+ * row and rebuilds it on load.
+ */
 export interface ProgramDocument {
   version: number
-  /** Free-text label, e.g. "Term 4 — Week 10". */
-  name: string
+  /** The site currently being looked at. A view setting, not data. */
   site: Site
   bookings: Booking[]
   blocks: Block[]
@@ -296,4 +303,4 @@ export interface ProgramDocument {
   updatedAt: string
 }
 
-export const DOCUMENT_VERSION = 5
+export const DOCUMENT_VERSION = 6
