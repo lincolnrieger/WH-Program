@@ -1,4 +1,4 @@
-import type { PrintAudience, PrintOptions, PrintScope } from './PrintView'
+import type { PrintOptions, PrintScope } from './PrintView'
 import { formatDate, startOfWeek } from '@/lib/time'
 import { termWeekOfWeek } from '@/lib/term'
 import { Modal } from '@/components/ui/Modal'
@@ -10,11 +10,18 @@ export interface PrintCounts {
   siteWeek: number
 }
 
-/** Chooses what goes on paper before the browser print dialog opens. */
+/**
+ * Chooses what goes on paper, and offers the same thing as a spreadsheet.
+ *
+ * The Excel file is the same layout with the same colours — it's there for
+ * emailing to a school or keeping alongside the workbooks these sheets grew
+ * out of.
+ */
 export function PrintDialog({
   options,
   onChange,
   onPrint,
+  onExcel,
   onClose,
   bookingName,
   date,
@@ -23,6 +30,7 @@ export function PrintDialog({
   options: PrintOptions
   onChange: (patch: Partial<PrintOptions>) => void
   onPrint: () => void
+  onExcel: () => void
   onClose: () => void
   bookingName: string | undefined
   date: string
@@ -34,7 +42,7 @@ export function PrintDialog({
     {
       id: 'booking',
       label: bookingName ? `${bookingName} — whole stay` : 'Selected school — whole stay',
-      detail: 'Every day of the visit stacked down one page, one page per school.',
+      detail: 'The school handout: every day of the visit, a column per group.',
       count: counts.booking,
     },
     {
@@ -46,39 +54,32 @@ export function PrintDialog({
     {
       id: 'site-day',
       label: `Holistic — ${formatDate(date)}`,
-      detail: 'Every school on site that day, time down the left, on one page.',
+      detail: 'Every school on site that day, side by side.',
       count: counts.siteDay,
     },
     {
       id: 'site-week',
       label: `Holistic — ${week.label}`,
-      detail: 'Every school and building for the whole week, on one page.',
+      detail: 'The whole week: a band per day, schools side by side.',
       count: counts.siteWeek,
     },
   ]
 
-  const audiences: { id: PrintAudience; label: string; detail: string }[] = [
-    {
-      id: 'staff',
-      label: 'Staff run sheet',
-      detail: 'Staff names on every session, trainees marked with #.',
-    },
-    {
-      id: 'school',
-      label: 'School handout',
-      detail: 'The same itinerary and colours with no staff names on it.',
-    },
-  ]
+  const isHolistic = options.scope === 'site-day' || options.scope === 'site-week'
+  const empty = scopes.find((s) => s.id === options.scope)?.count === 0
 
   return (
     <Modal
-      title="Print"
+      title="Print or export"
       width={520}
       onClose={onClose}
       footer={
         <>
           <Button onClick={onClose}>Cancel</Button>
-          <Button variant="primary" onClick={onPrint}>
+          <Button disabled={empty} onClick={onExcel}>
+            Export to Excel
+          </Button>
+          <Button variant="primary" disabled={empty} onClick={onPrint}>
             Print
           </Button>
         </>
@@ -120,35 +121,10 @@ export function PrintDialog({
           </div>
         </Group>
 
-        <Group label="Who it's for">
-          <div className="grid grid-cols-2 gap-1.5">
-            {audiences.map((audience) => (
-              <button
-                key={audience.id}
-                type="button"
-                onClick={() => onChange({ audience: audience.id })}
-                className={cx(
-                  'rounded-lg border px-2.5 py-2 text-left transition-colors',
-                  options.audience === audience.id
-                    ? 'border-[var(--brand)] bg-[var(--brand-tint)]'
-                    : 'border-[var(--line)] hover:bg-[var(--surface-sunk)]',
-                )}
-              >
-                <span className="block text-[12.5px] font-medium text-[var(--ink)]">
-                  {audience.label}
-                </span>
-                <span className="block text-[11px] leading-snug text-[var(--ink-soft)]">
-                  {audience.detail}
-                </span>
-              </button>
-            ))}
-          </div>
-        </Group>
-
         <div className="space-y-1 border-t border-[var(--line)] pt-2">
           <Check
             label="Fit each sheet onto one page"
-            hint="Shrinks the whole sheet rather than letting it spill over."
+            hint="Shrinks the whole sheet rather than letting it spill over. Printing only."
             checked={options.fitToPage}
             onChange={(fitToPage) => onChange({ fitToPage })}
           />
@@ -159,6 +135,7 @@ export function PrintDialog({
           />
           <Check
             label="Include the activity colour key"
+            hint="The Excel file always gets it as its own tab."
             checked={options.showLegend}
             onChange={(showLegend) => onChange({ showLegend })}
           />
@@ -166,7 +143,10 @@ export function PrintDialog({
 
         <p className="rounded-md bg-[var(--surface-sunk)] px-2 py-1.5 text-[11px] leading-snug text-[var(--ink-soft)]">
           Print in <strong>Landscape</strong> with <strong>Background graphics</strong> turned on so
-          the activity colours come through.
+          the activity colours come through. The Excel file keeps them either way —{' '}
+          {isHolistic
+            ? 'one Holistic tab plus the colour key.'
+            : 'one tab per school plus the colour key.'}
         </p>
       </div>
     </Modal>

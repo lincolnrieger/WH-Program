@@ -4,6 +4,11 @@
  * Times are stored as **minutes from midnight** (e.g. 9:30am === 570). Dates are
  * stored as ISO calendar dates (`YYYY-MM-DD`) with no timezone attached — a camp
  * day is a local calendar day, never an instant.
+ *
+ * The model is deliberately thin. This app builds itineraries: what happens,
+ * when, and for which group. Who runs a session is rostered elsewhere, so
+ * nothing here carries staff assignments and nothing here enforces scheduling
+ * rules — the planner decides, the app draws.
  */
 
 export type Site = 'woodhouse' | 'roonka'
@@ -13,7 +18,7 @@ export const SITES: { id: Site; name: string; short: string }[] = [
   { id: 'roonka', name: 'Roonka', short: 'Roonka' },
 ]
 
-/** How an activity gets delivered — drives staffing requirements. */
+/** How an activity gets delivered — drives the suffix on the printed title. */
 export type Delivery = 'staff' | 'teacher_led' | 'self_led'
 
 export const DELIVERY_LABELS: Record<Delivery, string> = {
@@ -38,20 +43,8 @@ export interface Activity {
   colour: string
   /** Typical run time in minutes, used as the default block length. */
   defaultDurationMin: number
-  /** Minutes of staff set-up before the session starts. */
-  setupMin: number
-  /** Minutes of pack-down after the session ends. */
-  packdownMin: number
   /** Venue ids this activity can run at. Empty = no fixed venue. */
   venueIds: string[]
-  /** Max students in one session, if the activity is capped. */
-  capacity?: number
-  /** Staff needed when run by staff (0 for activities that are always teacher led). */
-  minStaff: number
-  /** Only one group on site can be doing this at a time (single set of equipment). */
-  exclusive?: boolean
-  /** Activity ids that must not run at the same time as this one. */
-  conflictsWith: string[]
   /** Free-text scheduling guidance from the activity notes sheet. */
   notes?: string
   /** Deliveries this activity is normally offered as. */
@@ -59,7 +52,7 @@ export interface Activity {
   /**
    * Names this activity goes by in the staff-training workbook, where several
    * sign-offs (e.g. "Laser Skirmish LIC" and "Laser Skirmish 2nd") map onto one
-   * scheduled activity. Used when matching staff competency.
+   * scheduled activity. Used when matching staff competency on the Staff page.
    */
   trainingNames?: string[]
 }
@@ -101,19 +94,8 @@ export const COMPETENCY_COLOURS: Record<CompetencyLevel, string> = {
   unknown: '#c9c9c9',
 }
 
-/** Levels considered qualified to run a session unsupervised. */
+/** Levels considered signed off to run a session. */
 export const QUALIFIED_LEVELS: CompetencyLevel[] = ['trainer', 'can_run']
-
-/** Order used by the training matrix when cycling a cell through the levels. */
-export const COMPETENCY_CYCLE: CompetencyLevel[] = [
-  'unknown',
-  'wants_to_learn',
-  'in_training',
-  'can_run_elsewhere',
-  'can_run',
-  'trainer',
-  'no',
-]
 
 /** Single-character badge shown in the dense training matrix. */
 export const COMPETENCY_SHORT: Record<CompetencyLevel, string> = {
@@ -122,7 +104,7 @@ export const COMPETENCY_SHORT: Record<CompetencyLevel, string> = {
   can_run_elsewhere: 'W',
   in_training: 'P',
   wants_to_learn: 'L',
-  no: '\u2013',
+  no: '–',
   unknown: '',
 }
 
@@ -134,6 +116,12 @@ export interface CompetencyEntry {
   note?: string
 }
 
+/**
+ * Someone who works on site, and what they're trained on.
+ *
+ * This is a reference table, not a roster: nothing in the schedule points at a
+ * staff member. Rostering is a separate job done elsewhere.
+ */
 export interface StaffMember {
   id: string
   name: string
@@ -206,33 +194,12 @@ export interface Block {
   /** Overrides the activity name (or supplies the name for non-activity blocks). */
   title?: string
   delivery: Delivery
-  staffIds: string[]
-  /**
-   * Subset of `staffIds` who are on this session to be trained rather than to
-   * run it. They print with a `#` after their name and don't count towards the
-   * activity's staffing requirement.
-   */
-  trainingStaffIds?: string[]
   venueId?: string
   note?: string
   /** Locked blocks cannot be moved or resized by dragging. */
   locked?: boolean
   /** Colour override; falls back to the activity colour or a kind default. */
   colour?: string
-}
-
-export type IssueSeverity = 'error' | 'warning' | 'info'
-
-export interface Issue {
-  id: string
-  severity: IssueSeverity
-  /** Machine-readable rule that produced this issue. */
-  rule: string
-  message: string
-  /** Blocks the issue points at — used to highlight them on the grid. */
-  blockIds: string[]
-  date: string
-  bookingId?: string
 }
 
 /**
@@ -303,4 +270,4 @@ export interface ProgramDocument {
   updatedAt: string
 }
 
-export const DOCUMENT_VERSION = 6
+export const DOCUMENT_VERSION = 7

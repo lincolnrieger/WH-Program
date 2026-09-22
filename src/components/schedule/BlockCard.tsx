@@ -1,5 +1,5 @@
 import { memo, useMemo, type PointerEvent as ReactPointerEvent } from 'react'
-import type { Activity, Block, Issue } from '@/types'
+import type { Activity, Block } from '@/types'
 import { blockPalette, colourFromString } from '@/lib/colour'
 import { blockTitle } from '@/lib/exportImport'
 import { formatRange } from '@/lib/time'
@@ -20,9 +20,7 @@ export interface BlockCardProps {
   dark: boolean
   selected: boolean
   highlighted: boolean
-  issues: Issue[]
   venueName?: string
-  staffNames: string[]
   /** Stacking order for this block's layer — bands sit behind per-group blocks. */
   baseZ: number
   onSelect: (blockId: string, additive: boolean) => void
@@ -37,17 +35,12 @@ export interface BlockCardProps {
  */
 export const BlockCard = memo(function BlockCard({
   block, activity, top, height, left, width, dark, selected, highlighted,
-  issues, venueName, staffNames, baseZ, onSelect,
+  venueName, baseZ, onSelect,
 }: BlockCardProps) {
   const colour = block.colour ?? activity?.colour ?? colourFromString(block.title ?? block.id)
   const palette = useMemo(() => blockPalette(colour, dark), [colour, dark])
 
   const title = blockTitle(block, activity)
-  const worstIssue = issues.reduce<'error' | 'warning' | null>((worst, issue) => {
-    if (issue.severity === 'error') return 'error'
-    if (issue.severity === 'warning' && worst !== 'error') return 'warning'
-    return worst
-  }, null)
 
   const compact = height < 46
   const roomy = height >= 74
@@ -148,16 +141,6 @@ export const BlockCard = memo(function BlockCard({
           >
             {title}
           </span>
-          {worstIssue && (
-            <span
-              aria-label={worstIssue === 'error' ? 'Clash' : 'Warning'}
-              title={issues.map((i) => i.message).join('\n')}
-              className="mt-px shrink-0 text-[11px] leading-none"
-              style={{ color: worstIssue === 'error' ? 'var(--danger)' : 'var(--warn)' }}
-            >
-              {worstIssue === 'error' ? '●' : '▲'}
-            </span>
-          )}
           {block.locked && (
             <span aria-label="Locked" title="Locked" className="mt-px shrink-0 text-[10px] opacity-60">
               &#128274;
@@ -171,9 +154,9 @@ export const BlockCard = memo(function BlockCard({
           </span>
         )}
 
-        {roomy && (venueName || staffNames.length > 0) && (
+        {roomy && venueName && (
           <span className="truncate text-[10.5px] leading-[13px]" style={{ color: palette.muted }}>
-            {[venueName, staffNames.join(', ')].filter(Boolean).join(' · ')}
+            {venueName}
           </span>
         )}
       </div>

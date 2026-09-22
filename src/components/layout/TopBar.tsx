@@ -19,7 +19,7 @@ const PAGES: { id: Page; label: string }[] = [
 export function TopBar({
   site, onSite, page, onPage, prefs, onPrefs,
   canUndo, canRedo, onUndo, onRedo,
-  onExportCsv, onPrint, onStartFresh, onLoadSample, issueCount, sync, onRetrySync,
+  onExportCsv, onBackup, onRestore, onPrint, onStartFresh, onLoadSample, sync, onRetrySync,
 }: {
   site: Site
   onSite: (site: Site) => void
@@ -32,10 +32,11 @@ export function TopBar({
   onUndo: () => void
   onRedo: () => void
   onExportCsv: () => void
+  onBackup: () => void
+  onRestore: () => void
   onPrint: () => void
   onStartFresh: () => void
   onLoadSample: () => void
-  issueCount: number
   sync: SyncState
   onRetrySync: () => void
 }) {
@@ -102,16 +103,6 @@ export function TopBar({
       <div className="ml-auto flex items-center gap-1.5">
         <SyncBadge sync={sync} onRetry={onRetrySync} />
 
-        {issueCount > 0 && showsGrid && (
-          <span
-            className="tnum hidden items-center gap-1 rounded-full bg-[var(--danger-tint)] px-2 py-0.5 text-[11px] font-semibold text-[var(--danger)] lg:inline-flex"
-            title={`${issueCount} clash${issueCount === 1 ? '' : 'es'} to resolve`}
-          >
-            <span aria-hidden className="h-1.5 w-1.5 rounded-full bg-[var(--danger)]" />
-            {issueCount}
-          </span>
-        )}
-
         <div className="flex items-center rounded-md border border-[var(--line)]">
           <IconButton label="Undo (Ctrl+Z)" disabled={!canUndo} onClick={onUndo} className="rounded-r-none">
             &#8630;
@@ -134,7 +125,7 @@ export function TopBar({
 
         {showsGrid && (
           <Button size="sm" onClick={onPrint}>
-            Print
+            Print / export
           </Button>
         )}
 
@@ -150,7 +141,14 @@ export function TopBar({
               <div className="fixed inset-0 z-40" onClick={() => setMenuOpen(false)} aria-hidden />
               <div className="absolute right-0 z-50 mt-1 w-[280px] overflow-hidden rounded-lg border border-[var(--line)] bg-[var(--surface)] py-1 shadow-[var(--shadow-lg)]">
                 <MenuItem onClick={() => { setMenuOpen(false); onExportCsv() }}>
-                  Export schedule (.csv)
+                  Export every session (.csv)
+                </MenuItem>
+                <div className="my-1 h-px bg-[var(--line)]" />
+                <MenuItem onClick={() => { setMenuOpen(false); onBackup() }}>
+                  Download a backup of the plan
+                </MenuItem>
+                <MenuItem onClick={() => { setMenuOpen(false); onRestore() }}>
+                  Restore from a backup…
                 </MenuItem>
                 <div className="my-1 h-px bg-[var(--line)]" />
                 <MenuItem onClick={() => { setMenuOpen(false); onLoadSample() }}>

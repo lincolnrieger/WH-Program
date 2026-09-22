@@ -22,8 +22,7 @@ export interface Prefs {
   zoom: number
   dayStartMin: number
   dayEndMin: number
-  showConflicts: boolean
-  /** Show venue and staff on blocks that are tall enough. */
+  /** Show the venue on blocks that are tall enough. */
   showBlockDetail: boolean
 }
 
@@ -33,7 +32,6 @@ export const DEFAULT_PREFS: Prefs = {
   zoom: 1.1,
   dayStartMin: 7 * 60,
   dayEndMin: 21 * 60 + 30,
-  showConflicts: true,
   showBlockDetail: true,
 }
 
@@ -51,16 +49,23 @@ function migrate(raw: unknown): ProgramDocument | null {
     version: DOCUMENT_VERSION,
     site: doc.site ?? 'woodhouse',
     bookings: doc.bookings,
-    blocks: doc.blocks.map((block) => ({
-      ...block,
-      // v1 stored a single groupId; v2 onwards stores an array.
-      groupIds: Array.isArray(block.groupIds)
-        ? block.groupIds
-        : [(block as unknown as { groupId?: string }).groupId].filter(Boolean) as string[],
-      staffIds: block.staffIds ?? [],
-      delivery: block.delivery ?? 'staff',
-      kind: block.kind ?? 'activity',
-    })),
+    blocks: doc.blocks.map((block) => {
+      // v7 dropped staff assignments from the schedule; a stored block may
+      // still carry them, so strip them rather than letting them ride along.
+      const { staffIds, trainingStaffIds, ...rest } =
+        block as typeof block & { staffIds?: unknown; trainingStaffIds?: unknown }
+      void staffIds
+      void trainingStaffIds
+      return {
+        ...rest,
+        // v1 stored a single groupId; v2 onwards stores an array.
+        groupIds: Array.isArray(block.groupIds)
+          ? block.groupIds
+          : [(block as unknown as { groupId?: string }).groupId].filter(Boolean) as string[],
+        delivery: block.delivery ?? 'staff',
+        kind: block.kind ?? 'activity',
+      }
+    }),
     customActivities: doc.customActivities ?? [],
     // v4 added in-app editing of activities, venues and staff.
     customVenues: doc.customVenues ?? [],

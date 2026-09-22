@@ -77,7 +77,6 @@ export function buildRotation(request: RotationRequest): Block[] {
           kind: 'activity',
           activityId,
           delivery: activity.deliveries.includes(delivery) ? delivery : activity.deliveries[0],
-          staffIds: [],
           venueId: activity.venueIds[0],
         })
       })

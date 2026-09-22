@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react'
-import type { Activity, Block, Booking, Issue } from '@/types'
+import type { Activity, Block, Booking } from '@/types'
 import { DAY_TEMPLATES } from '@/data/templates'
 import { bookingDates, bookingHeadline, bookingSubhead } from '@/lib/exportImport'
 import { formatDate, weekdayShort } from '@/lib/time'
@@ -11,8 +11,8 @@ const HEADER_HEIGHT = 30
 
 /** The main editing surface: one school, one day, a column per group. */
 export function BookingView({
-  booking, date, blocks, activities, venueNames, staffNames, issues,
-  selection, highlightIds, dayStartMin, dayEndMin, zoom, dark, showConflicts, showDetail,
+  booking, date, blocks, activities, venueNames,
+  selection, highlightIds, dayStartMin, dayEndMin, zoom, dark, showDetail,
   onSelect, onClearSelection, onDateChange, onApplyTemplate, onOpenRotation,
   onCopyDay, onClearDay, onEditBooking, onEmptyDoubleClick,
 }: {
@@ -21,15 +21,12 @@ export function BookingView({
   blocks: Block[]
   activities: Map<string, Activity>
   venueNames: Map<string, string>
-  staffNames: Map<string, string>
-  issues: Issue[]
   selection: string[]
   highlightIds: string[]
   dayStartMin: number
   dayEndMin: number
   zoom: number
   dark: boolean
-  showConflicts: boolean
   showDetail: boolean
   onSelect: (blockId: string, additive: boolean) => void
   onClearSelection: () => void
@@ -49,8 +46,6 @@ export function BookingView({
     () => blocks.filter((block) => block.bookingId === booking.id && block.date === date),
     [blocks, booking.id, date],
   )
-
-  const dayIssues = useMemo(() => issues.filter((issue) => issue.date === date), [issues, date])
 
   return (
     <section className="flex min-w-0 flex-1 flex-col overflow-hidden">
@@ -99,7 +94,7 @@ export function BookingView({
             </div>
 
             <Button size="sm" variant="primary" onClick={onOpenRotation}>
-              Build rotation
+              Add activities
             </Button>
 
             <div className="relative">
@@ -140,9 +135,6 @@ export function BookingView({
 
         <div className="flex flex-wrap gap-1">
           {dates.map((option, index) => {
-            const errors = issues.filter(
-              (issue) => issue.date === option && issue.severity === 'error',
-            ).length
             return (
               <button
                 key={option}
@@ -158,12 +150,6 @@ export function BookingView({
                 <span className="tnum">
                   Day {index + 1} · {weekdayShort(option)}
                 </span>
-                {errors > 0 && (
-                  <span
-                    aria-label={`${errors} clashes`}
-                    className="absolute -top-1 -right-1 h-2.5 w-2.5 rounded-full bg-[var(--danger)] ring-2 ring-[var(--surface)]"
-                  />
-                )}
               </button>
             )
           })}
@@ -185,15 +171,12 @@ export function BookingView({
             blocks={dayBlocks}
             activities={activities}
             venueNames={venueNames}
-            staffNames={staffNames}
-            issues={dayIssues}
             selection={selection}
             highlightIds={highlightIds}
             dayStartMin={dayStartMin}
             dayEndMin={dayEndMin}
             zoom={zoom}
             dark={dark}
-            showConflicts={showConflicts}
             showDetail={showDetail}
             onSelect={onSelect}
             onBackgroundClick={onClearSelection}

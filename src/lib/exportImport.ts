@@ -2,8 +2,8 @@ import type { Activity, Block, Booking, ProgramDocument } from '@/types'
 import { DELIVERY_SUFFIX, SITES } from '@/types'
 import { dateRange, formatDate, formatTime } from './time'
 
-export function downloadFile(filename: string, content: string, type: string): void {
-  const blob = new Blob([content], { type })
+export function downloadFile(filename: string, content: string | Blob, type: string): void {
+  const blob = content instanceof Blob ? content : new Blob([content], { type })
   const url = URL.createObjectURL(blob)
   const link = document.createElement('a')
   link.href = url
@@ -15,23 +15,8 @@ export function downloadFile(filename: string, content: string, type: string): v
   setTimeout(() => URL.revokeObjectURL(url), 1000)
 }
 
-function safeName(name: string): string {
+export function safeName(name: string): string {
   return name.replace(/[^a-z0-9]+/gi, '-').replace(/^-|-$/g, '').toLowerCase() || 'program'
-}
-
-/**
- * A staff member's name as it should read anywhere the roster is shown.
- *
- * Someone on a session to be trained rather than to run it gets a trailing
- * `#` — the convention the paper run sheets already use.
- */
-export function staffLabel(block: Block, staffId: string, name: string): string {
-  return block.trainingStaffIds?.includes(staffId) ? `${name} #` : name
-}
-
-/** Names of everyone rostered on a block, trainees marked with `#`. */
-export function staffLabels(block: Block, names: Map<string, { name: string }>): string[] {
-  return block.staffIds.map((id) => staffLabel(block, id, names.get(id)?.name ?? id))
 }
 
 /** Title as it should read on the grid and in exports, including the TL suffix. */
@@ -43,6 +28,19 @@ export function blockTitle(block: Block, activity?: Activity): string {
   return base + suffix
 }
 
+/**
+ * The fill a block should print with.
+ *
+ * Activities carry their colour through from the colour key. Meals and
+ * logistics print unfilled, the way they appear on the itinerary sheets — the
+ * muted colours they have on screen are there to tell the rows apart while
+ * planning, not to end up on paper.
+ */
+export function exportFill(block: Block, activities: Map<string, Activity>): string | undefined {
+  if (block.kind === 'meal' || block.kind === 'logistics') return undefined
+  return block.colour ?? (block.activityId ? activities.get(block.activityId)?.colour : undefined)
+}
+
 function csvCell(value: string): string {
   if (/[",\n]/.test(value)) return `"${value.replace(/"/g, '""')}"`
   return value
@@ -50,20 +48,19 @@ function csvCell(value: string): string {
 
 /**
  * One row per scheduled block. This is the shape that pastes cleanly back into
- * Excel for anyone who still wants the spreadsheet.
+ * Excel for anyone who wants the raw list rather than the laid-out sheet.
  */
 export function exportCsv(
   doc: ProgramDocument,
   activities: Map<string, Activity>,
   venues: Map<string, { name: string }>,
-  staff: Map<string, { name: string }>,
 ): void {
   const site = SITES.find((s) => s.id === doc.site)?.short ?? 'Woodhouse'
 
   const header = [
     'Date', 'Day', 'School', 'Year level', 'Package', 'Building',
     'Group', 'Start', 'End', 'Duration (min)', 'Activity', 'Delivery',
-    'Venue', 'Staff', 'Notes',
+    'Venue', 'Notes',
   ]
 
   const rows: string[][] = []
@@ -95,7 +92,6 @@ export function exportCsv(
       blockTitle(block, activity).replace(/\n/g, ' '),
       block.delivery,
       block.venueId ? venues.get(block.venueId)?.name ?? block.venueId : '',
-      staffLabels(block, staff).join(', '),
       (block.note ?? '').replace(/\n/g, ' '),
     ])
   }
@@ -108,13 +104,14 @@ export function exportCsv(
   )
 }
 
-/** Header line matching the existing sheets: "School - Year - 45est / Package - Building". */
+/** Header line matching the existing sheets: "School - Year - 45est". */
 export function bookingHeadline(booking: Booking): string {
   const parts = [booking.schoolName, booking.yearLevel]
   if (booking.studentCount) parts.push(`${booking.studentCount}est`)
   return parts.filter(Boolean).join(' - ')
 }
 
+/** Second header line: "Gold - Manor & Bunkhouse". */
 export function bookingSubhead(booking: Booking): string {
   const tier = booking.packageTier === 'custom' ? '' : booking.packageTier
   return [tier ? tier[0].toUpperCase() + tier.slice(1) : '', booking.building]

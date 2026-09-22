@@ -4,17 +4,14 @@ import type {
   ProgramDocument, Site, StaffMember, Venue,
 } from '@/types'
 import { DOCUMENT_VERSION, EMPTY_OVERRIDES } from '@/types'
-import {
-  competencyKey, overridesOf, resolveActivities, resolveActivityMap, resolveStaffMap,
-  resolveVenueMap,
-} from '@/data/resolve'
+import { competencyKey, overridesOf, resolveActivities, resolveActivityMap } from '@/data/resolve'
 import { SEED_ACTIVITIES } from '@/data/activities'
 import { SEED_VENUES } from '@/data/venues'
 import { SEED_STAFF } from '@/data/staff'
 import { createSeedDocument } from '@/data/seed'
 import { DAY_TEMPLATES, instantiateTemplate } from '@/data/templates'
-import { findIssues, type ConflictContext } from '@/lib/conflicts'
 import { buildRotation, type RotationSlot } from '@/lib/rotation'
+import { colourFromString } from '@/lib/colour'
 import { uid } from '@/lib/id'
 import { addDays, dateRange } from '@/lib/time'
 import type { RemoteState } from '@/lib/api'
@@ -52,6 +49,12 @@ interface State {
   /** Block ids the grid should flash, e.g. after a rotation is generated. */
   highlightIds: string[]
   search: string
+  /**
+   * Activities set aside at the top of the palette, ready to drag onto the
+   * grid by hand. This is a scratch list for whoever is planning right now —
+   * it belongs to this browser, not to the shared plan.
+   */
+  pickedActivityIds: string[]
 
   // ── document ──
   setDoc: (doc: ProgramDocument) => void
@@ -100,6 +103,8 @@ interface State {
 
   // ── catalogue editing ──
   saveActivity: (activity: Activity) => void
+  /** Creates an activity from just a name, for the box at the top of the palette. */
+  addCustomActivity: (name: string) => string | null
   deleteActivity: (id: string) => void
   restoreHiddenActivities: () => void
 
@@ -127,6 +132,9 @@ interface State {
   setHighlight: (ids: string[]) => void
   setSearch: (value: string) => void
   setPrefs: (patch: Partial<Prefs>) => void
+  pickActivities: (ids: string[]) => void
+  unpickActivity: (id: string) => void
+  clearPicked: () => void
 }
 
 function stamp(doc: ProgramDocument): ProgramDocument {
@@ -188,6 +196,7 @@ export const useStore = create<State>((set, get) => {
     selection: { blockIds: [] },
     highlightIds: [],
     search: '',
+    pickedActivityIds: [],
 
     setDoc: (doc) => {
       const previous = get().doc
@@ -558,6 +567,45 @@ export const useStore = create<State>((set, get) => {
     restoreHiddenActivities: () =>
       commit((doc) => withOverrides(doc, (o) => ({ ...o, hiddenActivityIds: [] }))),
 
+    /**
+     * Adds an activity from a name alone.
+     *
+     * Typing one straight into the palette is the quickest route to something
+     * that isn't in the catalogue yet, so it gets sensible defaults and a
+     * colour derived from its name. Everything else about it — the colour
+     * included — is editable on the Activities page afterwards.
+     */
+    addCustomActivity: (name) => {
+      const trimmed = name.trim()
+      if (!trimmed) return null
+
+      const { doc } = get()
+      const existing = resolveActivities(doc).find(
+        (a) => a.name.toLowerCase() === trimmed.toLowerCase(),
+      )
+      if (existing) {
+        set((s) => ({
+          pickedActivityIds: s.pickedActivityIds.includes(existing.id)
+            ? s.pickedActivityIds
+            : [...s.pickedActivityIds, existing.id],
+        }))
+        return existing.id
+      }
+
+      const activity: Activity = {
+        id: uid('act'),
+        name: trimmed,
+        sites: [doc.site],
+        colour: colourFromString(trimmed),
+        defaultDurationMin: 90,
+        venueIds: [],
+        deliveries: ['staff'],
+      }
+      commit((d) => ({ ...d, customActivities: [...d.customActivities, activity] }))
+      set((s) => ({ pickedActivityIds: [...s.pickedActivityIds, activity.id] }))
+      return activity.id
+    },
+
     saveVenue: (venue) =>
       commit((doc) => {
         if (isCustom(doc.customVenues, venue.id)) {
@@ -610,18 +658,10 @@ export const useStore = create<State>((set, get) => {
 
     deleteStaff: (id) =>
       commit((doc) => {
-        const stripped = {
-          ...doc,
-          blocks: doc.blocks.map((b) =>
-            b.staffIds.includes(id)
-              ? { ...b, staffIds: b.staffIds.filter((s) => s !== id) }
-              : b,
-          ),
-        }
         if (isCustom(doc.customStaff, id)) {
-          return { ...stripped, customStaff: doc.customStaff.filter((p) => p.id !== id) }
+          return { ...doc, customStaff: doc.customStaff.filter((p) => p.id !== id) }
         }
-        return withOverrides(stripped, (o) => ({
+        return withOverrides(doc, (o) => ({
           ...o,
           hiddenStaffIds: [...new Set([...o.hiddenStaffIds, id])],
         }))
@@ -713,6 +753,16 @@ export const useStore = create<State>((set, get) => {
         savePrefs(prefs)
         return { prefs }
       }),
+
+    pickActivities: (ids) =>
+      set((s) => ({
+        pickedActivityIds: [...new Set([...s.pickedActivityIds, ...ids])],
+      })),
+
+    unpickActivity: (id) =>
+      set((s) => ({ pickedActivityIds: s.pickedActivityIds.filter((other) => other !== id) })),
+
+    clearPicked: () => set({ pickedActivityIds: [] }),
   }
 })
 
@@ -747,17 +797,3 @@ export function activitiesForSite(doc: ProgramDocument, site: Site): Activity[] 
   return resolveActivities(doc).filter((a) => a.sites.includes(site))
 }
 
-export function buildConflictContext(doc: ProgramDocument): ConflictContext {
-  return {
-    blocks: doc.blocks,
-    bookings: doc.bookings,
-    activities: resolveActivityMap(doc),
-    venues: resolveVenueMap(doc),
-    staff: resolveStaffMap(doc),
-    overrides: overridesOf(doc),
-  }
-}
-
-export function computeIssues(doc: ProgramDocument) {
-  return findIssues(buildConflictContext(doc))
-}

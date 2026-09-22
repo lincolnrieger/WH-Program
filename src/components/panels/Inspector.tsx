@@ -1,10 +1,9 @@
 import { useMemo, useState } from 'react'
-import type { Activity, Block, Booking, Issue, Site, Venue } from '@/types'
-import { BLOCK_KIND_LABELS, COMPETENCY_COLOURS, DELIVERY_LABELS } from '@/types'
-import { MAX_SHIFT_MIN, availableStaff } from '@/lib/conflicts'
+import type { Activity, Block, Booking, Site, Venue } from '@/types'
+import { BLOCK_KIND_LABELS, DELIVERY_LABELS } from '@/types'
 import { formatDuration, formatTimeFull, parseTime } from '@/lib/time'
 import { blockTitle } from '@/lib/exportImport'
-import { buildConflictContext, useStore } from '@/store/useStore'
+import { useStore } from '@/store/useStore'
 import { Button, Chip, Field, IconButton, Input, Select, cx } from '@/components/ui/primitives'
 
 export interface InspectorProps {
@@ -13,7 +12,6 @@ export interface InspectorProps {
   activities: Map<string, Activity>
   venues: Venue[]
   site: Site
-  issues: Issue[]
   onClose: () => void
 }
 
@@ -21,7 +19,7 @@ export interface InspectorProps {
  * Edits whatever is currently selected. Multi-selection edits the fields that
  * make sense in bulk (time, delivery, venue) and leaves the rest alone.
  */
-export function Inspector({ blocks, booking, activities, venues, site, issues, onClose }: InspectorProps) {
+export function Inspector({ blocks, booking, activities, venues, site, onClose }: InspectorProps) {
   const updateBlock = useStore((s) => s.updateBlock)
   const updateBlocks = useStore((s) => s.updateBlocks)
   const removeBlocks = useStore((s) => s.removeBlocks)
@@ -30,11 +28,6 @@ export function Inspector({ blocks, booking, activities, venues, site, issues, o
   const single = blocks.length === 1 ? blocks[0] : undefined
   const ids = blocks.map((b) => b.id)
   const activity = single?.activityId ? activities.get(single.activityId) : undefined
-
-  const relevantIssues = useMemo(
-    () => issues.filter((issue) => issue.blockIds.some((id) => ids.includes(id))),
-    [issues, ids],
-  )
 
   const siteVenues = useMemo(() => venues.filter((v) => v.sites.includes(site)), [venues, site])
 
@@ -52,30 +45,6 @@ export function Inspector({ blocks, booking, activities, venues, site, issues, o
       </header>
 
       <div className="min-h-0 flex-1 space-y-3 overflow-y-auto p-3">
-        {relevantIssues.length > 0 && (
-          <div className="space-y-1.5">
-            {relevantIssues.map((issue) => (
-              <p
-                key={issue.id}
-                className="rounded-md border px-2 py-1.5 text-[11.5px] leading-snug"
-                style={{
-                  background:
-                    issue.severity === 'error' ? 'var(--danger-tint)'
-                    : issue.severity === 'warning' ? 'var(--warn-tint)'
-                    : 'var(--info-tint)',
-                  borderColor: 'transparent',
-                  color:
-                    issue.severity === 'error' ? 'var(--danger)'
-                    : issue.severity === 'warning' ? 'var(--warn)'
-                    : 'var(--info)',
-                }}
-              >
-                {issue.message}
-              </p>
-            ))}
-          </div>
-        )}
-
         <TimeFields blocks={blocks} onChange={(patch) => updateBlocks(ids, patch)} />
 
         {single && (
@@ -90,7 +59,7 @@ export function Inspector({ blocks, booking, activities, venues, site, issues, o
           </Field>
         )}
 
-        <Field label="Delivery">
+        <Field label="Delivery" hint="Teacher led prints as “- TL”, self led as “- Self Led”.">
           <Select
             value={single?.delivery ?? ''}
             onChange={(event) =>
@@ -148,17 +117,13 @@ export function Inspector({ blocks, booking, activities, venues, site, issues, o
           </Field>
         )}
 
-        {single && booking && single.delivery === 'staff' && (
-          <StaffPicker block={single} site={booking.site} />
-        )}
-
         {single && (
           <Field label="Note">
             <textarea
               value={single.note ?? ''}
               onChange={(event) => updateBlock(single.id, { note: event.target.value || undefined })}
               rows={2}
-              placeholder="Anything staff need to know…"
+              placeholder="Anything worth writing on the itinerary…"
               className="w-full resize-y rounded-md border border-[var(--line)] bg-[var(--surface)] px-2.5 py-1.5 text-[13px] text-[var(--ink)] placeholder:text-[var(--ink-faint)] focus:border-[var(--brand-soft)] focus:outline-none"
             />
           </Field>
@@ -184,15 +149,6 @@ export function Inspector({ blocks, booking, activities, venues, site, issues, o
             {activity.notes}
           </p>
         )}
-
-        {activity && (
-          <dl className="grid grid-cols-2 gap-x-2 gap-y-1 text-[11.5px]">
-            <Stat label="Set-up" value={formatDuration(activity.setupMin)} />
-            <Stat label="Pack-down" value={formatDuration(activity.packdownMin)} />
-            {activity.capacity && <Stat label="Capacity" value={`${activity.capacity} students`} />}
-            {activity.minStaff > 0 && <Stat label="Staff needed" value={String(activity.minStaff)} />}
-          </dl>
-        )}
       </div>
 
       <footer className="flex shrink-0 items-center gap-1.5 border-t border-[var(--line)] px-3 py-2">
@@ -210,15 +166,6 @@ export function Inspector({ blocks, booking, activities, venues, site, issues, o
         </Button>
       </footer>
     </aside>
-  )
-}
-
-function Stat({ label, value }: { label: string; value: string }) {
-  return (
-    <div>
-      <dt className="text-[var(--ink-faint)]">{label}</dt>
-      <dd className="tnum font-medium text-[var(--ink)]">{value}</dd>
-    </div>
   )
 }
 
@@ -325,136 +272,4 @@ function shift(blocks: Block[], delta: number): void {
       endMin: block.endMin + delta,
     })
   }
-}
-
-/** Staff list ordered by who is qualified and free. */
-function StaffPicker({ block, site }: { block: Block; site: Site }) {
-  const doc = useStore((s) => s.doc)
-  const updateBlock = useStore((s) => s.updateBlock)
-  const [expanded, setExpanded] = useState(false)
-
-  const options = useMemo(
-    () => availableStaff(block, buildConflictContext(doc), site),
-    [block, doc, site],
-  )
-
-  const byId = useMemo(() => new Map(options.map((o) => [o.person.id, o])), [options])
-  const training = block.trainingStaffIds ?? []
-  const shown = expanded ? options : options.filter((o) => o.qualified && !o.busy).slice(0, 12)
-
-  function toggle(id: string) {
-    const on = block.staffIds.includes(id)
-    updateBlock(block.id, {
-      staffIds: on ? block.staffIds.filter((s) => s !== id) : [...block.staffIds, id],
-      // Dropping someone drops their training flag with them.
-      trainingStaffIds: on ? training.filter((s) => s !== id) : training,
-    })
-  }
-
-  function toggleTraining(id: string) {
-    const next = training.includes(id) ? training.filter((s) => s !== id) : [...training, id]
-    updateBlock(block.id, { trainingStaffIds: next.length > 0 ? next : undefined })
-  }
-
-  return (
-    <Field label="Staff" hint="Green means signed off for this activity at this site.">
-      {block.staffIds.length > 0 && (
-        <ul className="mb-1.5 divide-y divide-[var(--line)] rounded-md border border-[var(--line)]">
-          {block.staffIds.map((id) => {
-            const option = byId.get(id)
-            const name = option?.person.name ?? id
-            const onTraining = training.includes(id)
-            const longShift = (option?.shiftMin ?? 0) > MAX_SHIFT_MIN
-            return (
-              <li key={id} className="flex items-center gap-1.5 px-1.5 py-1">
-                <span
-                  aria-hidden
-                  className="h-2 w-2 shrink-0 rounded-full"
-                  style={{
-                    background: option?.qualified
-                      ? COMPETENCY_COLOURS.can_run
-                      : onTraining
-                        ? COMPETENCY_COLOURS.in_training
-                        : COMPETENCY_COLOURS.no,
-                  }}
-                />
-                <span className="min-w-0 flex-1 truncate text-[12px]">
-                  {name}
-                  {onTraining && <span className="ml-1 font-semibold text-[var(--warn)]">#</span>}
-                </span>
-
-                {longShift && (
-                  <span
-                    title={`Would be on for ${formatDuration(option?.shiftMin ?? 0)} without a 30-minute break`}
-                    className="tnum shrink-0 text-[10px] font-medium text-[var(--danger)]"
-                  >
-                    {formatDuration(option?.shiftMin ?? 0)}
-                  </span>
-                )}
-
-                <label
-                  className="flex shrink-0 cursor-pointer items-center gap-1 rounded px-1 py-0.5 text-[10.5px] text-[var(--ink-faint)] hover:bg-[var(--surface-sunk)]"
-                  title="On this session to be trained — prints as “#” and doesn’t count towards the staffing minimum."
-                >
-                  <input
-                    type="checkbox"
-                    checked={onTraining}
-                    onChange={() => toggleTraining(id)}
-                    className="h-3 w-3 accent-[var(--brand)]"
-                  />
-                  Training
-                </label>
-
-                <IconButton label={`Remove ${name}`} onClick={() => toggle(id)} className="h-5 w-5">
-                  &#10005;
-                </IconButton>
-              </li>
-            )
-          })}
-        </ul>
-      )}
-
-      <div className="max-h-40 overflow-y-auto rounded-md border border-[var(--line)]">
-        {shown.map(({ person, qualified, busy, shiftMin }) => (
-          <button
-            key={person.id}
-            type="button"
-            onClick={() => toggle(person.id)}
-            className={cx(
-              'flex w-full items-center gap-1.5 px-2 py-1 text-left text-[12px] transition-colors',
-              'hover:bg-[var(--surface-sunk)]',
-              block.staffIds.includes(person.id) && 'bg-[var(--brand-tint)]',
-            )}
-          >
-            <span
-              aria-hidden
-              className="h-2 w-2 shrink-0 rounded-full"
-              style={{
-                background: qualified ? COMPETENCY_COLOURS.can_run : COMPETENCY_COLOURS.wants_to_learn,
-              }}
-            />
-            <span className="min-w-0 flex-1 truncate">{person.name}</span>
-            {shiftMin > MAX_SHIFT_MIN && (
-              <span
-                className="shrink-0 text-[10px] text-[var(--danger)]"
-                title={`Adding them makes a ${formatDuration(shiftMin)} shift with no 30-minute break`}
-              >
-                no break
-              </span>
-            )}
-            {busy && <span className="shrink-0 text-[10px] text-[var(--warn)]">busy</span>}
-          </button>
-        ))}
-        {shown.length === 0 && (
-          <p className="px-2 py-2 text-[11.5px] text-[var(--ink-faint)]">
-            Nobody is signed off for this activity yet.
-          </p>
-        )}
-      </div>
-
-      <Button size="sm" variant="ghost" className="mt-1" onClick={() => setExpanded((v) => !v)}>
-        {expanded ? 'Show qualified only' : `Show all ${options.length} staff`}
-      </Button>
-    </Field>
-  )
 }
