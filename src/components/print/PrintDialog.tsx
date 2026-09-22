@@ -42,25 +42,25 @@ export function PrintDialog({
     {
       id: 'booking',
       label: `${school} — whole stay`,
-      detail: 'The handout you give the school: every day, a column per group.',
+      detail: 'The program you give the school: every day, a column per group. A4.',
       count: counts.booking,
     },
     {
       id: 'booking-day',
       label: `${school} — ${formatDateLong(date)}`,
-      detail: 'Just this one day of the visit.',
+      detail: 'Just this one day of the visit. A4.',
       count: counts.booking,
     },
     {
       id: 'site-day',
       label: `Everyone on site — ${formatDateLong(date)}`,
-      detail: 'Every school here that day, side by side on one page.',
+      detail: 'Every school here that day, side by side. Prints on A3.',
       count: counts.siteDay,
     },
     {
       id: 'site-week',
       label: `Everyone on site — ${week.label}`,
-      detail: 'The whole week, a band per day, on one page.',
+      detail: 'The whole week, a band per day, on one page. Prints on A3.',
       count: counts.siteWeek,
     },
   ]
@@ -123,7 +123,8 @@ export function PrintDialog({
 
         <p className="pt-1 text-[11px] leading-snug text-[var(--ink-faint)]">
           Printing? Turn on <strong className="font-medium">Background graphics</strong> so the
-          activity colours come through. The Excel file keeps them either way.
+          activity colours come through — the paper size is set for you. The Excel file keeps the
+          colours either way.
         </p>
       </div>
     </Modal>

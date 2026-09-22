@@ -81,20 +81,22 @@ you want — and then prints it or saves it as a spreadsheet.
 | Everyone on site, one day | Every school here that day, side by side |
 | Everyone on site, one week | The whole week, a band per day |
 
-**On paper**, the school handout is A4 portrait with the days down the page. It
-is set to be read — on a bus, on a hill, through a photocopier — so the type is
-a comfortable size, the rules are hairlines, and the days break cleanly onto a
-second page rather than being shrunk to fit. Activities carry their colour as a
-soft wash with a solid edge in the same hue: the colour language staff already
-know, without a page that fights you. Meals and logistics get no fill at all,
-which is what keeps the page from turning into a patchwork.
+**On paper**, both sheets are reproductions of the ones the program has always
+sent out, because staff, teachers and schools all know them by sight. What
+changed is only where they come from.
 
-The holistic sheet is the exception, because its job is to show everybody at
-once. It stays landscape, sets the schools side by side in even columns with
-each keeping its own time column — a day visit arriving at 9.45 and a camp
-starting at 7.30 don't share a clock — and is scaled to land on exactly one
-page. Turn on **Background graphics** in the print dialog so the colours come
-through.
+The **school program** is A4 portrait: the Woodhouse logo, the school's name in
+green, the dates and the note that TL means teacher led, then one bordered table
+per day with the weekday in the corner and a column per group. The **holistic
+sheet** is A3 landscape, a band per day, every school on site side by side, each
+keeping its own time column — a day visit arriving at 9.45 and a camp starting
+at 7.30 don't share a clock, but the bands still read straight across. Cells
+past the end of a school's day are blacked out, which is how that sheet has
+always shown a school has left.
+
+Activity colours are the fills from the colour key, at full strength.
+The paper size is set for you; turn on **Background graphics** in the print
+dialog so the colours come through.
 
 **As a spreadsheet**, both come out as a real `.xlsx` laid out like the
 workbooks they replace, with the exact fills from the colour key and the key

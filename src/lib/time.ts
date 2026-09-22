@@ -167,6 +167,32 @@ export function formatDateRangeLong(startIso: string, endIso: string): string {
   return `${from} – ${formatDateLong(endIso)} ${year}`
 }
 
+/**
+ * "02-04/03/26" — the shorthand the printed itineraries head a stay with.
+ *
+ * A stay inside one month collapses to two day numbers; one that crosses a
+ * month keeps both, and a single day is just itself.
+ */
+export function formatStayRange(startIso: string, endIso: string): string {
+  const start = fromISODate(startIso)
+  const end = fromISODate(endIso)
+  const dd = (date: Date) => String(date.getDate()).padStart(2, '0')
+  const mm = (date: Date) => String(date.getMonth() + 1).padStart(2, '0')
+  const yy = String(end.getFullYear()).slice(-2)
+
+  if (startIso === endIso) return `${dd(end)}/${mm(end)}/${yy}`
+  if (start.getMonth() === end.getMonth() && start.getFullYear() === end.getFullYear()) {
+    return `${dd(start)}-${dd(end)}/${mm(end)}/${yy}`
+  }
+  return `${dd(start)}/${mm(start)}-${dd(end)}/${mm(end)}/${yy}`
+}
+
+/** "2-Mar" — the date as it sits under the weekday on the holistic sheet. */
+export function formatDayShort(iso: string): string {
+  const date = fromISODate(iso)
+  return `${date.getDate()}-${MONTHS[date.getMonth()]}`
+}
+
 /** "21/09/2026" — Australian order, for print headers. */
 export function formatDateNumeric(iso: string): string {
   const date = fromISODate(iso)

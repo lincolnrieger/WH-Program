@@ -197,6 +197,31 @@ body.is-dragging * {
 }
 
 /*
+ * The printed grids: thin black rules on every cell, a heavier box around a
+ * day's table, and no rule at all on the spacer columns that separate one
+ * school from the next on the holistic sheet.
+ */
+.print-grid {
+  border-collapse: collapse;
+}
+
+.print-grid th,
+.print-grid td {
+  border: 1px solid #000000;
+  padding: 2px 4px;
+}
+
+.print-grid--boxed {
+  border: 2px solid #000000;
+}
+
+.print-grid .print-gap {
+  border: 0;
+  padding: 0;
+  background: transparent;
+}
+
+/*
  * Two shapes of sheet. The holistic sheet has to land on exactly one landscape
  * page, so it is a fixed box that its contents are scaled into. A school
  * handout is meant to be read rather than crammed, so it is a portrait column
