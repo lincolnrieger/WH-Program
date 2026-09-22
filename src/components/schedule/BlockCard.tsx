@@ -21,6 +21,8 @@ export interface BlockCardProps {
   selected: boolean
   highlighted: boolean
   venueName?: string
+  /** Off hides the time range, for planners who read the axis instead. */
+  showTimes?: boolean
   /** Stacking order for this block's layer — bands sit behind per-group blocks. */
   baseZ: number
   onSelect: (blockId: string, additive: boolean) => void
@@ -35,7 +37,7 @@ export interface BlockCardProps {
  */
 export const BlockCard = memo(function BlockCard({
   block, activity, top, height, left, width, dark, selected, highlighted,
-  venueName, baseZ, onSelect,
+  venueName, showTimes = true, baseZ, onSelect,
 }: BlockCardProps) {
   const colour = block.colour ?? activity?.colour ?? colourFromString(block.title ?? block.id)
   const palette = useMemo(() => blockPalette(colour, dark), [colour, dark])
@@ -148,7 +150,7 @@ export const BlockCard = memo(function BlockCard({
           )}
         </div>
 
-        {!compact && (
+        {!compact && showTimes && (
           <span className="tnum text-[10.5px] leading-[13px]" style={{ color: palette.muted }}>
             {formatRange(block.startMin, block.endMin)}
           </span>

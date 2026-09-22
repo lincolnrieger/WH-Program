@@ -276,25 +276,24 @@ export default function App() {
     return siteBookings
   }, [printOptions.scope, booking, siteBookings, date])
 
-  const exportExcel = useCallback(() => {
-    const shared = {
-      blocks: doc.blocks,
-      activities,
-      activityList,
-      site: doc.site,
+  const excelInput = useMemo(
+    () => ({ blocks: doc.blocks, activities, activityList, site: doc.site }),
+    [doc.blocks, activities, activityList, doc.site],
+  )
+
+  const exportWeekExcel = useCallback(() => {
+    exportHolisticWorkbook({ ...excelInput, bookings: siteBookings, date })
+    setToast('Week saved as a spreadsheet.')
+  }, [excelInput, siteBookings, date])
+
+  const exportSchoolExcel = useCallback(() => {
+    if (!booking) {
+      setToast('Pick a school first.')
+      return
     }
-    if (printOptions.scope === 'site-day' || printOptions.scope === 'site-week') {
-      exportHolisticWorkbook({
-        ...shared,
-        bookings: siteBookings,
-        date,
-      })
-    } else if (booking) {
-      exportBookingWorkbook({ ...shared, bookings: [booking] })
-    }
-    setPrintOpen(false)
-    setToast('Spreadsheet downloaded.')
-  }, [doc.blocks, doc.site, activities, activityList, printOptions.scope, siteBookings, date, booking])
+    exportBookingWorkbook({ ...excelInput, bookings: [booking] })
+    setToast(`${booking.schoolName} saved as a spreadsheet.`)
+  }, [excelInput, booking])
 
   const weekBounds = useMemo(() => {
     const start = startOfWeek(date)
@@ -320,6 +319,9 @@ export default function App() {
         onExportCsv={() => exportCsv(doc, activities, venueMap)}
         onBackup={() => exportBackup(doc)}
         onRestore={() => void restoreBackup()}
+        onExportWeekExcel={exportWeekExcel}
+        onExportSchoolExcel={exportSchoolExcel}
+        schoolName={booking?.schoolName}
         onImport={() => setImportOpen(true)}
         onPrint={() => setPrintOpen(true)}
         sync={sync}
@@ -403,6 +405,7 @@ export default function App() {
               zoom={prefs.zoom}
               dark={prefs.theme === 'dark'}
               showDetail={prefs.showBlockDetail}
+              showTimes={prefs.showBlockTimes}
               onSelect={handleSelect}
               onClearSelection={handleClearSelection}
               onOpenBooking={(id) => {
@@ -433,6 +436,9 @@ export default function App() {
                 zoom={prefs.zoom}
                 dark={prefs.theme === 'dark'}
                 showDetail={prefs.showBlockDetail}
+                showTimes={prefs.showBlockTimes}
+                mode={prefs.planMode}
+                onMode={(planMode) => useStore.getState().setPrefs({ planMode })}
                 onSelect={handleSelect}
                 onClearSelection={handleClearSelection}
                 onDateChange={(next) => useStore.getState().setActiveDate(next)}
@@ -529,7 +535,6 @@ export default function App() {
             // Let the dialog unmount before the print sheet is captured.
             window.setTimeout(() => window.print(), 60)
           }}
-          onExcel={exportExcel}
           onClose={() => setPrintOpen(false)}
           bookingName={booking?.schoolName}
           date={date}

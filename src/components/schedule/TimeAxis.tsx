@@ -37,7 +37,11 @@ export function TimeAxis({
         className="sticky top-0 z-30 border-b border-[var(--line)] bg-[var(--surface)]"
         style={{ height: headerHeight }}
       />
-      <div className="relative" style={{ height: (dayEndMin - dayStartMin) * pxPerMinute }}>
+      <div
+        data-time-axis
+        className="relative"
+        style={{ height: (dayEndMin - dayStartMin) * pxPerMinute }}
+      >
         {ticks.map((min) => (
           <span
             key={min}

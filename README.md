@@ -47,12 +47,20 @@ around, nothing to remember to save.
 - **Add a custom activity** — the box at the top of the palette takes a name and
   makes an activity there and then, ready to drag. It's a real catalogue entry,
   so its colour and length are editable on the Activities page afterwards.
+- **View** sets how the grid is drawn, as choices rather than dials: a **size**
+  (Compact to Huge), which **hours** to show (activity hours, the whole camp
+  day, everything, or a pair of times you set), what dragging **snaps** to, and
+  whether blocks carry their times and venue. It remembers what you picked.
 - Undo/redo across everything (<kbd>Ctrl</kbd>+<kbd>Z</kbd>).
 
 **Five sections**
-- **Plan** — one school, one day, a column per group. The main editing surface.
-  The **Schools** list beside it is the week you're looking at, not the whole
-  term; search it to reach any school in any week.
+- **Plan** — one school at a time. **Day** is a column per group for the day
+  you're on, the close-up you build in; **Whole stay** lays every day of the
+  visit out side by side against the same time axis, which is the view you want
+  when you're checking a group doesn't do the tube slide twice, or dragging
+  Wednesday's spare session back to Tuesday. Clicking a day's heading in that
+  view opens it on its own. The **Schools** list beside it is the week you're
+  looking at, not the whole term; search it to reach any school in any week.
 - **Whole site** — the holistic picture, as a **day** or a whole **week**, for
   every school or just one. Day mode is the same grid as the planning view, one
   block of columns per school, with sessions draggable straight from one school
@@ -71,8 +79,8 @@ in `src/lib/term.ts` — see [DATA.md](DATA.md#school-terms).
 
 ## Getting work out
 
-**Print / export** (<kbd>Ctrl</kbd>+<kbd>P</kbd>) asks one question — what do
-you want — and then prints it or saves it as a spreadsheet.
+**Print / PDF** (<kbd>Ctrl</kbd>+<kbd>P</kbd>) asks one question — what do you
+want — and then saves it as a PDF or sends it to a printer.
 
 | Choice | What you get |
 | --- | --- |
@@ -98,9 +106,9 @@ Activity colours are the fills from the colour key, at full strength.
 The paper size is set for you; turn on **Background graphics** in the print
 dialog so the colours come through.
 
-**As a spreadsheet**, both come out as a real `.xlsx` laid out like the
-workbooks they replace, with the exact fills from the colour key and the key
-itself on its own tab.
+**As a spreadsheet**, the same two sheets come out of the Program menu as real
+`.xlsx` files laid out like the workbooks they replace, with the exact fills
+from the colour key and the key itself on its own tab.
 
 **Import** (Program → *Import from spreadsheets*) reads the workbooks the
 program was run from before this app and turns them into bookings and sessions.
@@ -119,10 +127,13 @@ and "Challenge Hill (Dry)" to the activities they extend. Anything still
 unrecognised is added to the catalogue keeping the colour it had in the
 spreadsheet, rather than being dropped.
 
-**Program menu**
-- *Export every session (.csv)* — one row per session, for anyone who wants the
-  raw list rather than the laid-out sheet.
-- *Download a backup of the plan* / *Restore from a backup* — the whole plan as
+**Program menu**, in three parts — what you bring in, what you take out, and
+the plan as a whole.
+- *Save this week as a spreadsheet* / *Save <school> as a spreadsheet* — the
+  holistic sheet and the open school's itinerary as `.xlsx`.
+- *Save every session as a list* — one row per session as `.csv`, for anyone who
+  wants the raw list rather than the laid-out sheet.
+- *Download a backup* / *Restore from a backup* — the whole plan as
   one file. There's only one plan and it lives in the database, so this isn't a
   document format; it's there so a mistake big enough to want undoing after the
   fact can be undone.

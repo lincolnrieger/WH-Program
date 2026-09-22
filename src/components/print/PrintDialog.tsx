@@ -11,16 +11,16 @@ export interface PrintCounts {
 }
 
 /**
- * One question — what do you want — then print it or save it as a spreadsheet.
+ * One question — what do you want — and one button.
  *
- * There used to be options here for venues, the colour key and fitting to a
- * page. Every one of them had a right answer, so they are now just the answer.
+ * The button opens the browser's own print window, which is where both a PDF
+ * and a printed sheet come from; the paper size is already set for whichever
+ * sheet was chosen, so there is nothing to get wrong there either.
  */
 export function PrintDialog({
   options,
   onChange,
   onPrint,
-  onExcel,
   onClose,
   bookingName,
   date,
@@ -29,7 +29,6 @@ export function PrintDialog({
   options: PrintOptions
   onChange: (patch: Partial<PrintOptions>) => void
   onPrint: () => void
-  onExcel: () => void
   onClose: () => void
   bookingName: string | undefined
   date: string
@@ -69,17 +68,14 @@ export function PrintDialog({
 
   return (
     <Modal
-      title="Print or export"
+      title="Print or save a PDF"
       width={480}
       onClose={onClose}
       footer={
         <>
           <Button onClick={onClose}>Cancel</Button>
-          <Button disabled={empty} onClick={onExcel}>
-            Save as Excel
-          </Button>
           <Button variant="primary" disabled={empty} onClick={onPrint}>
-            Print
+            Save as PDF
           </Button>
         </>
       }
@@ -122,9 +118,11 @@ export function PrintDialog({
         ))}
 
         <p className="pt-1 text-[11px] leading-snug text-[var(--ink-faint)]">
-          Printing? Turn on <strong className="font-medium">Background graphics</strong> so the
-          activity colours come through — the paper size is set for you. The Excel file keeps the
-          colours either way.
+          Opens your browser's print window: keep{' '}
+          <strong className="font-medium">Save as PDF</strong> as the destination, or send it
+          straight to a printer. Leave{' '}
+          <strong className="font-medium">Background graphics</strong> on so the activity colours
+          come through — the paper size is already set.
         </p>
       </div>
     </Modal>
