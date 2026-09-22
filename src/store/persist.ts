@@ -16,9 +16,6 @@ const PREFS_KEY = 'wh-program:prefs:v1'
 const QUEUE_KEY = 'wh-program:queue:v1'
 const ADOPTED_KEY = 'wh-program:adopted:v1'
 
-/** Whether the plan page shows one day or every day of the stay at once. */
-export type PlanMode = 'day' | 'stay'
-
 export interface Prefs {
   theme: 'light' | 'dark'
   snapMinutes: number
@@ -29,7 +26,6 @@ export interface Prefs {
   showBlockDetail: boolean
   /** Show the start and end time on blocks that are tall enough. */
   showBlockTimes: boolean
-  planMode: PlanMode
 }
 
 export const DEFAULT_PREFS: Prefs = {
@@ -40,7 +36,6 @@ export const DEFAULT_PREFS: Prefs = {
   dayEndMin: 21 * 60 + 30,
   showBlockDetail: true,
   showBlockTimes: true,
-  planMode: 'day',
 }
 
 /**

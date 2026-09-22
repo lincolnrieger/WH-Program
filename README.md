@@ -27,6 +27,10 @@ around, nothing to remember to save.
 **Scheduling**
 - Drag an activity from the palette onto any group column at any time.
 - Drag a block to move it; drag its top or bottom edge to change the length.
+- A session can be dragged anywhere on screen — another group, another school,
+  another day. Push towards an edge and the view scrolls under the pointer, so
+  Friday can reach Monday without letting go. The card under the cursor says
+  where it will land: **Wed · Keithcot Farm · Group 2**, with the time.
 - Snap to 5 / 10 / 15 / 30 minutes; hold <kbd>Alt</kbd> while dragging for
   5-minute precision without changing the setting.
 - Type times directly in the inspector — `9`, `930`, `9:30`, `1.30pm` all work.
@@ -54,18 +58,19 @@ around, nothing to remember to save.
 - Undo/redo across everything (<kbd>Ctrl</kbd>+<kbd>Z</kbd>).
 
 **Five sections**
-- **Plan** — one school at a time. **Day** is a column per group for the day
-  you're on, the close-up you build in; **Whole stay** lays every day of the
-  visit out side by side against the same time axis, which is the view you want
-  when you're checking a group doesn't do the tube slide twice, or dragging
-  Wednesday's spare session back to Tuesday. Clicking a day's heading in that
-  view opens it on its own. The **Schools** list beside it is the week you're
-  looking at, not the whole term; search it to reach any school in any week.
-- **Whole site** — the holistic picture, as a **day** or a whole **week**, for
-  every school or just one. Day mode is the same grid as the planning view, one
-  block of columns per school, with sessions draggable straight from one school
-  to another. Week mode drops the time axis for seven days at once — the view
-  you want when you're working out where a new booking fits.
+- **Plan** — one school at a time, on whichever days the strip at the top has
+  selected: one to build it, the whole stay to check a group isn't doing the
+  tube slide twice or to drag Wednesday's spare session back to Tuesday. The
+  header's tools act on the day marked in green; click a day's heading to move
+  that mark. The **Schools** list beside it is the week you're looking at, not
+  the whole term; search it to reach any school in any week.
+- **Whole site** — the holistic picture, for every school or just one.
+  **Timetable** is the working view: the days you've selected, side by side,
+  with a block of columns per school inside each one and every session
+  draggable between them. One day is today's site plan; the whole week is the
+  holistic sheet, live. **Coverage** trades the time axis for reach — seven
+  days at once, each school's sessions listed in order, which is the view you
+  want when you're working out where a new booking fits.
 - **Staff** — who's trained on what. A reference table, not a roster.
 - **Activities** — the catalogue: name, colour, how long it runs, venue, and how
   it's offered.
@@ -76,6 +81,14 @@ camps are actually booked: **Term 3 Week 9**, with the calendar dates under it.
 The week picker lists whole weeks the same way, with a dot per school on site,
 so jumping to the week you mean is one click. South Australian term dates are
 in `src/lib/term.ts` — see [DATA.md](DATA.md#school-terms).
+
+Its day strip is where you choose what's on screen, and it is the only place
+that choice is made — the views below read it rather than having modes of their
+own. Click a day for that day; drag across the strip for a run of them;
+ctrl-click to add or drop one. **Week** takes all seven, **Stay** takes the
+open school's own days (even where they straddle a Sunday, in which case the
+extra days join the strip with a dashed edge), and **Just one** comes back to a
+single day.
 
 ## Getting work out
 
@@ -253,12 +266,13 @@ src/
     useStore.ts            document state, undo/redo
     sync.ts                diffs each change into rows and keeps D1 in step
     persist.ts             local storage: a cache, and the offline queue
-    dragStore.ts           drag state + the grid registry
+    dragStore.ts           drag state, the grid registry, the scroll registry
   hooks/
     useDragController.ts   the pointer handlers behind every drag
   components/
     pages/                 Staff, Activities and Venues management
-    schedule/ week/        the grid, in both views
+    schedule/              the grid; Spread.tsx lays out days × schools
+    week/                  the whole-site header and the coverage table
     panels/ print/ ui/     inspector, the print sheets, shared primitives
 worker/
   index.ts                 the API: reads the plan, applies row-level changes
@@ -276,7 +290,16 @@ A few decisions worth knowing about:
   and the model stays small enough to keep in your head.
 - **Drag is hand-rolled** rather than a library. A time grid needs pixel-accurate
   snapping, edge resizing and drop targets computed from geometry; one custom
-  pointer controller (`useDragController.ts`) does all three consistently.
+  pointer controller (`useDragController.ts`) does all three consistently. Every
+  grid on screen registers its geometry, so a session dropped on another school
+  or another day works the same way as one nudged half an hour — and the same
+  controller drives the auto-scroll, re-resolving the drop target each scrolled
+  frame so the preview never lags behind the view.
+- **One spread, three views.** One school on one day, every school on one day
+  and every school across a week are the same component (`Spread.tsx`) with a
+  different day and school selection. Keeping them one thing is what makes a
+  session behave identically wherever it is dragged, and why the day strip can
+  own the choice instead of each view carrying its own modes.
 - **Activity colours are exact on paper and softened on screen.** The colour key
   uses ~40 saturated fills, which is unreadable at screen density, so blocks
   render as a soft tint of the real colour with a saturated left rail. Exports

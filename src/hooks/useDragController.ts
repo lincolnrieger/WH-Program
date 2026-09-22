@@ -2,12 +2,17 @@ import { useEffect, useRef } from 'react'
 import { ROUTINES } from '@/data/activities'
 import { allActivitiesMap, useStore } from '@/store/useStore'
 import {
-  getGrid, resolveResize, resolveTarget, useDragStore,
+  eachScroller, getGrid, resolveResize, resolveTarget, useDragStore,
 } from '@/store/dragStore'
 import type { Block } from '@/types'
 
 const DRAG_THRESHOLD_PX = 4
 const MIN_BLOCK_MIN = 15
+
+/** How close to a scroller's edge the pointer gets before the view moves. */
+const EDGE_PX = 80
+/** Top speed, in pixels per frame, with the pointer right on the edge. */
+const MAX_SCROLL_PX = 24
 
 /**
  * Installs the window-level pointer handlers that drive every drag in the app:
@@ -20,8 +25,90 @@ const MIN_BLOCK_MIN = 15
 export function useDragController(): void {
   const originRef = useRef<{ x: number; y: number } | null>(null)
   const resizeAnchorRef = useRef<number>(0)
+  const fineRef = useRef(false)
+  const frameRef = useRef<number | null>(null)
 
   useEffect(() => {
+    /**
+     * Works out where the thing being dragged would land, from wherever the
+     * pointer currently is.
+     *
+     * Kept separate from the pointer handler because the auto-scroll has to
+     * run it too: holding still at the edge of the view moves the grid under
+     * the pointer, and a preview that only updated on pointer movement would
+     * sit frozen over the wrong hour while the day scrolled past it.
+     */
+    function resolveNow(): void {
+      const drag = useDragStore.getState()
+      if (!drag.active) return
+      const { snapMinutes } = useStore.getState().prefs
+      const { x, y } = drag.pointer
+
+      if (drag.mode === 'resize-start' || drag.mode === 'resize-end') {
+        const resized = resolveResize(x, y, {
+          mode: drag.mode,
+          anchorMin: resizeAnchorRef.current,
+          snapMinutes,
+          fineSnap: fineRef.current,
+          minLengthMin: MIN_BLOCK_MIN,
+        })
+        if (!resized) return
+        const grid = getGrid(resized.gridId)
+        useDragStore.getState().setTarget({
+          gridId: resized.gridId,
+          bookingId: grid?.bookingId ?? '',
+          date: resized.date,
+          groupIndex: -1,
+          startMin: resized.startMin,
+          endMin: resized.endMin,
+          wholeSchool: false,
+        })
+        return
+      }
+
+      useDragStore.getState().setTarget(
+        resolveTarget(x, y, {
+          durationMin: drag.durationMin,
+          grabOffsetMin: drag.mode === 'move' ? drag.grabOffsetMin : drag.durationMin / 2,
+          snapMinutes,
+          fineSnap: fineRef.current,
+        }),
+      )
+    }
+
+    /** Nudges any registered scroller the pointer is pressing against. */
+    function autoScroll(): void {
+      const drag = useDragStore.getState()
+      if (!drag.active || !drag.moved) {
+        frameRef.current = null
+        return
+      }
+
+      let scrolled = false
+      eachScroller((element) => {
+        const rect = element.getBoundingClientRect()
+        const { x, y } = drag.pointer
+        // Only the scroller the pointer is actually over, or dragging in one
+        // view would drag every other view along with it.
+        if (x < rect.left - EDGE_PX || x > rect.right + EDGE_PX) return
+        if (y < rect.top - EDGE_PX || y > rect.bottom + EDGE_PX) return
+
+        const dx = edgeSpeed(x - rect.left, rect.right - x)
+        const dy = edgeSpeed(y - rect.top, rect.bottom - y)
+        if (dx === 0 && dy === 0) return
+
+        const before = { left: element.scrollLeft, top: element.scrollTop }
+        element.scrollLeft += dx
+        element.scrollTop += dy
+        if (element.scrollLeft !== before.left || element.scrollTop !== before.top) {
+          scrolled = true
+        }
+      })
+
+      if (scrolled) resolveNow()
+      frameRef.current = requestAnimationFrame(autoScroll)
+    }
+
     function handleMove(event: PointerEvent): void {
       const drag = useDragStore.getState()
       if (!drag.active) return
@@ -34,44 +121,20 @@ export function useDragController(): void {
       }
 
       event.preventDefault()
-      const { snapMinutes } = useStore.getState().prefs
-      const fineSnap = event.altKey
-
+      fineRef.current = event.altKey
       useDragStore.getState().setPointer({ x: event.clientX, y: event.clientY })
+      resolveNow()
 
-      if (drag.mode === 'resize-start' || drag.mode === 'resize-end') {
-        const resized = resolveResize(event.clientX, event.clientY, {
-          mode: drag.mode,
-          anchorMin: resizeAnchorRef.current,
-          snapMinutes,
-          fineSnap,
-          minLengthMin: MIN_BLOCK_MIN,
-        })
-        if (resized) {
-          const grid = getGrid(resized.gridId)
-          useDragStore.getState().setTarget({
-            gridId: resized.gridId,
-            bookingId: grid?.bookingId ?? '',
-            date: resized.date,
-            groupIndex: -1,
-            startMin: resized.startMin,
-            endMin: resized.endMin,
-            wholeSchool: false,
-          })
-        }
-        return
-      }
+      if (frameRef.current === null) frameRef.current = requestAnimationFrame(autoScroll)
+    }
 
-      const target = resolveTarget(event.clientX, event.clientY, {
-        durationMin: drag.durationMin,
-        grabOffsetMin: drag.mode === 'move' ? drag.grabOffsetMin : drag.durationMin / 2,
-        snapMinutes,
-        fineSnap,
-      })
-      useDragStore.getState().setTarget(target)
+    function stopScrolling(): void {
+      if (frameRef.current !== null) cancelAnimationFrame(frameRef.current)
+      frameRef.current = null
     }
 
     function handleUp(): void {
+      stopScrolling()
       const drag = useDragStore.getState()
       if (!drag.active) return
 
@@ -86,6 +149,7 @@ export function useDragController(): void {
     }
 
     function handleCancel(): void {
+      stopScrolling()
       originRef.current = null
       useDragStore.getState().end()
       document.body.classList.remove('is-dragging')
@@ -104,6 +168,7 @@ export function useDragController(): void {
       window.removeEventListener('pointerup', handleUp)
       window.removeEventListener('pointercancel', handleCancel)
       window.removeEventListener('keydown', handleKey)
+      stopScrolling()
     }
   }, [])
 
@@ -116,6 +181,18 @@ export function useDragController(): void {
       resizeAnchorRef.current = min
     }
   }, [])
+}
+
+/** Pixels to scroll this frame, given the pointer's distance to each edge. */
+function edgeSpeed(fromStart: number, fromEnd: number): number {
+  if (fromStart < EDGE_PX) return -ramp(fromStart)
+  if (fromEnd < EDGE_PX) return ramp(fromEnd)
+  return 0
+}
+
+function ramp(distance: number): number {
+  const closeness = Math.min(1, Math.max(0, (EDGE_PX - distance) / EDGE_PX))
+  return Math.ceil(closeness * closeness * MAX_SCROLL_PX)
 }
 
 /**

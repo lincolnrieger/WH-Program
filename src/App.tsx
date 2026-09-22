@@ -5,15 +5,15 @@ import { ROUTINES } from '@/data/activities'
 import {
   resolveActivities, resolveActivityMap, resolveStaff, resolveVenueMap, resolveVenues,
 } from '@/data/resolve'
-import { useStore } from '@/store/useStore'
+import { selectedDates, useStore } from '@/store/useStore'
 import { flushNow, refresh, startSync, subscribeToSync, syncState, type SyncState } from '@/store/sync'
 import { useDragController } from '@/hooks/useDragController'
 import { useKeyboardShortcuts } from '@/hooks/useKeyboardShortcuts'
 import { exportBackup, pickBackupFile, readBackup } from '@/lib/backup'
 import { exportBookingWorkbook, exportHolisticWorkbook } from '@/lib/excelExport'
-import { exportCsv } from '@/lib/exportImport'
+import { bookingDates, exportCsv } from '@/lib/exportImport'
 import { suggestSlots } from '@/lib/rotation'
-import { addDays, startOfWeek } from '@/lib/time'
+import { addDays, formatDate, startOfWeek } from '@/lib/time'
 import { TopBar } from '@/components/layout/TopBar'
 import { WeekBar } from '@/components/layout/WeekBar'
 import { SyncNotice } from '@/components/layout/SyncNotice'
@@ -40,6 +40,7 @@ export default function App() {
   const page = useStore((s) => s.page)
   const activeBookingId = useStore((s) => s.activeBookingId)
   const activeDate = useStore((s) => s.activeDate)
+  const extraDates = useStore((s) => s.extraDates)
   const selection = useStore((s) => s.selection.blockIds)
   const highlightIds = useStore((s) => s.highlightIds)
   const search = useStore((s) => s.search)
@@ -132,6 +133,29 @@ export default function App() {
   )
 
   const date = activeDate ?? booking?.startDate ?? new Date().toISOString().slice(0, 10)
+
+  // One selection of days, made in the strip at the top, read by every view
+  // below it. The plan view only ever shows days the open school is here for.
+  const shownDates = useMemo(() => {
+    const chosen = selectedDates({ activeDate: date, extraDates })
+    return chosen.length > 0 ? chosen : [date]
+  }, [date, extraDates])
+
+  const planDates = useMemo(
+    () =>
+      booking
+        ? shownDates.filter((day) => day >= booking.startDate && day <= booking.endDate)
+        : [],
+    [shownDates, booking],
+  )
+
+  const stayChip = useMemo(
+    () =>
+      booking
+        ? { label: 'Stay', dates: bookingDates(booking) }
+        : undefined,
+    [booking],
+  )
 
   const handleSelect = useCallback((blockId: string, additive: boolean) => {
     useStore.getState().select([blockId], additive)
@@ -336,7 +360,10 @@ export default function App() {
         <WeekBar
           bookings={siteBookings}
           date={date}
+          selected={shownDates}
+          stay={page === 'plan' ? stayChip : undefined}
           onDateChange={(next) => useStore.getState().setActiveDate(next)}
+          onDatesChange={(next) => useStore.getState().setDates(next)}
         />
       )}
 
@@ -395,6 +422,7 @@ export default function App() {
             <WeekView
               bookings={siteBookings}
               date={date}
+              days={shownDates}
               blocks={doc.blocks}
               activities={activities}
               venueNames={venueNames}
@@ -418,6 +446,7 @@ export default function App() {
                 if (created) setEditingBooking(created)
               }}
               onDateChange={(next) => useStore.getState().setActiveDate(next)}
+              onFocusDay={(next) => useStore.getState().focusDate(next)}
             />
           )}
 
@@ -437,27 +466,30 @@ export default function App() {
                 dark={prefs.theme === 'dark'}
                 showDetail={prefs.showBlockDetail}
                 showTimes={prefs.showBlockTimes}
-                mode={prefs.planMode}
-                onMode={(planMode) => useStore.getState().setPrefs({ planMode })}
+                days={planDates}
                 onSelect={handleSelect}
                 onClearSelection={handleClearSelection}
-                onDateChange={(next) => useStore.getState().setActiveDate(next)}
+                onFocusDay={(next) => useStore.getState().focusDate(next)}
                 onApplyTemplate={(templateId) =>
                   useStore.getState().applyDayTemplate(templateId, booking.id, date)
                 }
                 onOpenRotation={() => setRotationOpen(true)}
                 onClearDay={() => {
-                  if (confirm(`Clear everything scheduled for ${booking.schoolName} on this day?`)) {
+                  if (
+                    confirm(
+                      `Clear everything scheduled for ${booking.schoolName} on ${formatDate(date)}?`,
+                    )
+                  ) {
                     useStore.getState().clearDay(booking.id, date)
                   }
                 }}
                 onEditBooking={() => setEditingBooking(booking)}
-                onEmptyDoubleClick={(groupIndex, startMin) => {
+                onEmptyDoubleClick={(day, groupIndex, startMin) => {
                   const group = booking.groups[groupIndex]
                   if (!group) return
                   const id = useStore.getState().addBlock({
                     bookingId: booking.id,
-                    date,
+                    date: day,
                     startMin,
                     endMin: startMin + 90,
                     groupIds: [group.id],

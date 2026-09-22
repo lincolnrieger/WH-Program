@@ -1,20 +1,21 @@
 import { useMemo, useState } from 'react'
 import type { Activity, Block, Booking } from '@/types'
-import { blockTitle, bookingHeadline, bookingSubhead } from '@/lib/exportImport'
+import { blockTitle } from '@/lib/exportImport'
 import { blockPalette } from '@/lib/colour'
 import { addDays, dateRange, formatDate, formatTime, startOfWeek, weekdayShort } from '@/lib/time'
 import { termWeekOfWeek } from '@/lib/term'
-import { ScheduleGrid } from '@/components/schedule/ScheduleGrid'
-import { TimeAxis } from '@/components/schedule/TimeAxis'
+import { Spread } from '@/components/schedule/Spread'
 import { Button, EmptyState, Select, cx } from '@/components/ui/primitives'
 
-const HEADER_HEIGHT = 52
-
-export type SiteMode = 'day' | 'week'
+/** Timetable is the grids you drag in; coverage is the week at a glance. */
+export type SiteMode = 'timetable' | 'coverage'
 
 export interface WeekViewProps {
   bookings: Booking[]
+  /** The day the day-scoped tools act on. */
   date: string
+  /** Every day on screen, chosen in the strip at the top of the window. */
+  days: string[]
   blocks: Block[]
   activities: Map<string, Activity>
   venueNames: Map<string, string>
@@ -25,31 +26,34 @@ export interface WeekViewProps {
   zoom: number
   dark: boolean
   showDetail: boolean
-  showTimes?: boolean
+  showTimes: boolean
   onSelect: (blockId: string, additive: boolean) => void
   onClearSelection: () => void
   onOpenBooking: (id: string) => void
   onNewBooking: () => void
   onDateChange: (date: string) => void
+  onFocusDay: (date: string) => void
 }
 
 /**
- * The holistic view: what's happening across the site, either for one day or
- * for a whole week, for every school on site or just one.
+ * The holistic view: what's happening across the site, for whichever days are
+ * selected at the top and for every school on site or just one.
  *
- * Day mode is the editing picture — the same grid as the planning view, one
- * column block per school, with clashes between schools flagged and sessions
- * draggable straight from one school to another. Week mode trades the time
- * axis for coverage: seven days at once, each school's sessions listed in
- * order, which is the view you want when you're deciding where a new booking
- * can go.
+ * **Timetable** is the working picture — real grids, a block of columns per
+ * school inside each day, with sessions draggable straight from one school to
+ * another and from one day to the next. Pick one day and it is today's site
+ * plan; pick the week and it is the holistic sheet, live.
+ *
+ * **Coverage** trades the time axis for reach: the whole week, each school's
+ * sessions listed in order, which is the view you want when you're deciding
+ * where a new booking can go.
  */
 export function WeekView({
-  bookings, date, blocks, activities, venueNames,
+  bookings, date, days, blocks, activities, venueNames,
   selection, highlightIds, dayStartMin, dayEndMin, zoom, dark, showDetail, showTimes,
-  onSelect, onClearSelection, onOpenBooking, onNewBooking, onDateChange,
+  onSelect, onClearSelection, onOpenBooking, onNewBooking, onDateChange, onFocusDay,
 }: WeekViewProps) {
-  const [mode, setMode] = useState<SiteMode>('day')
+  const [mode, setMode] = useState<SiteMode>('timetable')
   const [focusId, setFocusId] = useState<string>('all')
 
   const weekStart = useMemo(() => startOfWeek(date), [date])
@@ -76,9 +80,13 @@ export function WeekView({
     [bookings, focused],
   )
 
-  const onSite = useMemo(
-    () => inScope.filter((booking) => date >= booking.startDate && date <= booking.endDate),
-    [inScope, date],
+  // Whoever is on site on any of the days being shown.
+  const onSelectedDays = useMemo(
+    () =>
+      inScope.filter((booking) =>
+        days.some((day) => day >= booking.startDate && day <= booking.endDate),
+      ),
+    [inScope, days],
   )
 
   const onSiteThisWeek = useMemo(
@@ -90,18 +98,29 @@ export function WeekView({
   )
 
   const term = termWeekOfWeek(weekStart)
-  const shown = mode === 'day' ? onSite : onSiteThisWeek
+  const shown = mode === 'timetable' ? onSelectedDays : onSiteThisWeek
+  const dayLabel =
+    days.length === 1
+      ? formatDate(days[0])
+      : days.length >= 7
+        ? term.label
+        : `${days.length} days`
 
   return (
     <section className="flex min-w-0 flex-1 flex-col overflow-hidden">
       <header className="no-print flex shrink-0 flex-wrap items-center gap-2 border-b border-[var(--line)] bg-[var(--surface)] px-3 py-1.5">
         <div className="flex items-center gap-0.5 rounded-lg bg-[var(--surface-sunk)] p-0.5">
-          {(['day', 'week'] as SiteMode[]).map((value) => (
+          {(['timetable', 'coverage'] as SiteMode[]).map((value) => (
             <button
               key={value}
               type="button"
               onClick={() => setMode(value)}
               aria-pressed={mode === value}
+              title={
+                value === 'timetable'
+                  ? 'The grids, for the days picked above — drag sessions between schools and days'
+                  : 'The whole week at a glance, one row per school'
+              }
               className={cx(
                 'rounded-md px-2.5 py-1 text-[12px] font-medium transition-colors',
                 mode === value
@@ -109,17 +128,17 @@ export function WeekView({
                   : 'text-[var(--ink-soft)] hover:text-[var(--ink)]',
               )}
             >
-              {value === 'day' ? 'Day' : 'Week'}
+              {value === 'timetable' ? 'Timetable' : 'Coverage'}
             </button>
           ))}
         </div>
 
         <div className="min-w-0">
           <h1 className="truncate text-[13px] leading-tight font-semibold text-[var(--ink)]">
-            {mode === 'day' ? formatDate(date) : term.label}
+            {mode === 'timetable' ? dayLabel : term.label}
           </h1>
           <p className="tnum truncate text-[10.5px] leading-tight text-[var(--ink-faint)]">
-            {mode === 'day'
+            {mode === 'timetable'
               ? term.label
               : `${formatDate(weekDays[0])} – ${formatDate(weekDays[6])}`}
             {' · '}
@@ -144,8 +163,8 @@ export function WeekView({
         </Select>
 
         <span className="ml-auto text-[11px] text-[var(--ink-faint)]">
-          {mode === 'day'
-            ? 'Drag a session between schools to move it across'
+          {mode === 'timetable'
+            ? 'Drag a session anywhere — another group, another school, another day'
             : 'Click a day to open it'}
         </span>
       </header>
@@ -154,8 +173,8 @@ export function WeekView({
         <EmptyState
           title="Nobody on site"
           body={
-            mode === 'day'
-              ? `No school is booked in for ${formatDate(date)}. Pick another day, or add a booking.`
+            mode === 'timetable'
+              ? `No school is booked in for ${dayLabel}. Pick other days above, or add a booking.`
               : `No school is booked in for ${term.label}. Pick another week, or add a booking.`
           }
           action={
@@ -164,88 +183,29 @@ export function WeekView({
             </Button>
           }
         />
-      ) : mode === 'day' ? (
-        <div className="flex min-h-0 flex-1 overflow-auto">
-          <TimeAxis
-            dayStartMin={dayStartMin}
-            dayEndMin={dayEndMin}
-            zoom={zoom}
-            headerHeight={HEADER_HEIGHT}
-          />
-
-          <div className="flex min-w-0 flex-1">
-            {onSite.map((booking) => {
-              const dayBlocks = blocks.filter(
-                (block) => block.bookingId === booking.id && block.date === date,
-              )
-              const columnMin = Math.max(booking.groups.length * 104, 168)
-
-              return (
-                <div
-                  key={booking.id}
-                  className="flex min-w-0 flex-col border-r border-[var(--line-strong)] last:border-r-0"
-                  style={{ flex: `1 1 ${columnMin}px`, minWidth: columnMin }}
-                >
-                  <div
-                    className="sticky top-0 z-40 shrink-0 border-b border-[var(--line)] bg-[var(--surface)] px-2 py-1"
-                    style={{ height: HEADER_HEIGHT }}
-                  >
-                    <button
-                      type="button"
-                      onClick={() => onOpenBooking(booking.id)}
-                      className="block w-full truncate text-left"
-                      title={`${bookingHeadline(booking)} — ${bookingSubhead(booking)}`}
-                    >
-                      <span className="block truncate text-[11.5px] leading-tight font-semibold text-[var(--ink)]">
-                        {bookingHeadline(booking)}
-                      </span>
-                      <span className="block truncate text-[10.5px] text-[var(--ink-soft)]">
-                        {bookingSubhead(booking)}
-                      </span>
-                    </button>
-                  </div>
-
-                  <div
-                    className="sticky z-30 grid shrink-0 border-b border-[var(--line)] bg-[var(--surface)]"
-                    style={{
-                      top: HEADER_HEIGHT,
-                      gridTemplateColumns: `repeat(${Math.max(booking.groups.length, 1)}, minmax(0, 1fr))`,
-                    }}
-                  >
-                    {booking.groups.map((group) => (
-                      <span
-                        key={group.id}
-                        className="truncate border-l border-[var(--line)] px-1 py-0.5 text-center text-[10px] font-medium text-[var(--ink-faint)] first:border-l-0"
-                      >
-                        {group.name}
-                      </span>
-                    ))}
-                  </div>
-
-                  <ScheduleGrid
-                    gridId={`week:${booking.id}:${date}`}
-                    booking={booking}
-                    date={date}
-                    blocks={dayBlocks}
-                    activities={activities}
-                    venueNames={venueNames}
-                    selection={selection}
-                    highlightIds={highlightIds}
-                    dayStartMin={dayStartMin}
-                    dayEndMin={dayEndMin}
-                    zoom={zoom}
-                    dark={dark}
-                    showDetail={showDetail}
-                    showTimes={showTimes}
-                    onSelect={onSelect}
-                    onBackgroundClick={onClearSelection}
-                    compact
-                  />
-                </div>
-              )
-            })}
-          </div>
-        </div>
+      ) : mode === 'timetable' ? (
+        <Spread
+          gridScope="site"
+          days={days}
+          bookings={onSelectedDays}
+          activeDate={date}
+          blocks={blocks}
+          activities={activities}
+          venueNames={venueNames}
+          selection={selection}
+          highlightIds={highlightIds}
+          dayStartMin={dayStartMin}
+          dayEndMin={dayEndMin}
+          zoom={zoom}
+          dark={dark}
+          showDetail={showDetail}
+          showTimes={showTimes}
+          showSchoolNames
+          onSelect={onSelect}
+          onClearSelection={onClearSelection}
+          onFocusDay={onFocusDay}
+          onOpenBooking={onOpenBooking}
+        />
       ) : (
         <SiteWeek
           bookings={onSiteThisWeek}

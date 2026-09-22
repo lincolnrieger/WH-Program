@@ -4,7 +4,13 @@ import { BASE_PX_PER_MIN } from './ScheduleGrid'
 
 export const TIME_AXIS_WIDTH = 62
 
-/** The fixed time gutter down the left of the schedule. */
+/**
+ * The time gutter down the left of the schedule.
+ *
+ * It sticks to the left edge of its scroller: a week of schools is far wider
+ * than the screen, and a clock that scrolls away with the first day leaves
+ * every later day unreadable.
+ */
 export function TimeAxis({
   dayStartMin,
   dayEndMin,
@@ -30,11 +36,11 @@ export function TimeAxis({
 
   return (
     <div
-      className="relative shrink-0 border-r border-[var(--line)] bg-[var(--surface-sunk)]"
+      className="sticky left-0 z-[60] shrink-0 border-r border-[var(--line)] bg-[var(--surface-sunk)]"
       style={{ width: TIME_AXIS_WIDTH }}
     >
       <div
-        className="sticky top-0 z-30 border-b border-[var(--line)] bg-[var(--surface)]"
+        className="sticky top-0 z-10 border-b border-[var(--line)] bg-[var(--surface)]"
         style={{ height: headerHeight }}
       />
       <div
