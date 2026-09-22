@@ -24,6 +24,8 @@ export interface ScheduleGridProps {
   dark: boolean
   /** Show the venue on blocks tall enough for it. */
   showDetail: boolean
+  /** Show the time range on blocks tall enough for it. */
+  showTimes?: boolean
   onSelect: (blockId: string, additive: boolean) => void
   onBackgroundClick: () => void
   /** Click on empty grid space — used to create a block at that time. */
@@ -39,7 +41,7 @@ export interface ScheduleGridProps {
  */
 export function ScheduleGrid({
   gridId, booking, date, blocks, activities, venueNames,
-  selection, highlightIds, dayStartMin, dayEndMin, zoom, dark, showDetail,
+  selection, highlightIds, dayStartMin, dayEndMin, zoom, dark, showDetail, showTimes = true,
   onSelect, onBackgroundClick, onEmptyDoubleClick, compact = false,
 }: ScheduleGridProps) {
   const canvasRef = useRef<HTMLDivElement>(null)
@@ -112,6 +114,7 @@ export function ScheduleGrid({
 
       <div
         ref={canvasRef}
+        data-grid-canvas={gridId}
         /* Height is set explicitly from the zoom level — no flex sizing here, or
            flex-basis collapses the canvas to 0px and drop targets stop resolving. */
         className="relative w-full shrink-0"
@@ -153,6 +156,7 @@ export function ScheduleGrid({
               selected={selection.includes(block.id)}
               highlighted={highlightIds.includes(block.id)}
               venueName={showDetail && block.venueId ? venueNames.get(block.venueId) : undefined}
+              showTimes={showTimes}
               onSelect={onSelect}
             />
           )

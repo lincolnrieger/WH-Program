@@ -25,6 +25,7 @@ export interface WeekViewProps {
   zoom: number
   dark: boolean
   showDetail: boolean
+  showTimes?: boolean
   onSelect: (blockId: string, additive: boolean) => void
   onClearSelection: () => void
   onOpenBooking: (id: string) => void
@@ -45,7 +46,7 @@ export interface WeekViewProps {
  */
 export function WeekView({
   bookings, date, blocks, activities, venueNames,
-  selection, highlightIds, dayStartMin, dayEndMin, zoom, dark, showDetail,
+  selection, highlightIds, dayStartMin, dayEndMin, zoom, dark, showDetail, showTimes,
   onSelect, onClearSelection, onOpenBooking, onNewBooking, onDateChange,
 }: WeekViewProps) {
   const [mode, setMode] = useState<SiteMode>('day')
@@ -235,6 +236,7 @@ export function WeekView({
                     zoom={zoom}
                     dark={dark}
                     showDetail={showDetail}
+                    showTimes={showTimes}
                     onSelect={onSelect}
                     onBackgroundClick={onClearSelection}
                     compact

@@ -20,7 +20,7 @@ export function TopBar({
   site, onSite, page, onPage, prefs, onPrefs,
   canUndo, canRedo, onUndo, onRedo,
   onExportCsv, onBackup, onRestore, onImport, onPrint, onStartFresh, onLoadSample,
-  sync, onRetrySync,
+  onExportWeekExcel, onExportSchoolExcel, schoolName, sync, onRetrySync,
 }: {
   site: Site
   onSite: (site: Site) => void
@@ -36,6 +36,10 @@ export function TopBar({
   onBackup: () => void
   onRestore: () => void
   onImport: () => void
+  onExportWeekExcel: () => void
+  onExportSchoolExcel: () => void
+  /** The school currently open, so the menu can name what it will save. */
+  schoolName?: string
   onPrint: () => void
   onStartFresh: () => void
   onLoadSample: () => void
@@ -127,7 +131,7 @@ export function TopBar({
 
         {showsGrid && (
           <Button size="sm" onClick={onPrint}>
-            Print / export
+            Print / PDF
           </Button>
         )}
 
@@ -141,27 +145,56 @@ export function TopBar({
           {menuOpen && (
             <>
               <div className="fixed inset-0 z-40" onClick={() => setMenuOpen(false)} aria-hidden />
-              <div className="absolute right-0 z-50 mt-1 w-[280px] overflow-hidden rounded-lg border border-[var(--line)] bg-[var(--surface)] py-1 shadow-[var(--shadow-lg)]">
-                <MenuItem onClick={() => { setMenuOpen(false); onImport() }}>
-                  Import from spreadsheets…
-                </MenuItem>
-                <MenuItem onClick={() => { setMenuOpen(false); onExportCsv() }}>
-                  Export every session (.csv)
-                </MenuItem>
-                <div className="my-1 h-px bg-[var(--line)]" />
-                <MenuItem onClick={() => { setMenuOpen(false); onBackup() }}>
-                  Download a backup of the plan
-                </MenuItem>
-                <MenuItem onClick={() => { setMenuOpen(false); onRestore() }}>
-                  Restore from a backup…
-                </MenuItem>
-                <div className="my-1 h-px bg-[var(--line)]" />
-                <MenuItem onClick={() => { setMenuOpen(false); onLoadSample() }}>
-                  Load the sample week
-                </MenuItem>
-                <MenuItem onClick={() => { setMenuOpen(false); onStartFresh() }}>
-                  Start fresh…
-                </MenuItem>
+              <div className="absolute right-0 z-50 mt-1 w-[300px] overflow-hidden rounded-lg border border-[var(--line)] bg-[var(--surface)] py-1 shadow-[var(--shadow-lg)]">
+                <MenuHeading>Bring work in</MenuHeading>
+                <MenuItem
+                  label="Import from spreadsheets…"
+                  detail="Old itinerary workbooks, or a zipped week folder."
+                  onClick={() => { setMenuOpen(false); onImport() }}
+                />
+
+                <MenuHeading>Take a copy out</MenuHeading>
+                <MenuItem
+                  label="Save this week as a spreadsheet"
+                  detail="The holistic sheet as .xlsx, colours and all."
+                  onClick={() => { setMenuOpen(false); onExportWeekExcel() }}
+                />
+                <MenuItem
+                  label={
+                    schoolName
+                      ? `Save ${schoolName} as a spreadsheet`
+                      : 'Save the open school as a spreadsheet'
+                  }
+                  detail="That school's itinerary as .xlsx."
+                  onClick={() => { setMenuOpen(false); onExportSchoolExcel() }}
+                />
+                <MenuItem
+                  label="Save every session as a list"
+                  detail="One row per session as .csv, for sorting and counting."
+                  onClick={() => { setMenuOpen(false); onExportCsv() }}
+                />
+
+                <MenuHeading>The whole plan</MenuHeading>
+                <MenuItem
+                  label="Download a backup"
+                  detail="Everything, in one file, in case of a bad day."
+                  onClick={() => { setMenuOpen(false); onBackup() }}
+                />
+                <MenuItem
+                  label="Restore from a backup…"
+                  detail="Replaces the plan for everyone. Asks first."
+                  onClick={() => { setMenuOpen(false); onRestore() }}
+                />
+                <MenuItem
+                  label="Load the sample week"
+                  detail="A few overlapping stays, to see how it fits together."
+                  onClick={() => { setMenuOpen(false); onLoadSample() }}
+                />
+                <MenuItem
+                  label="Start fresh…"
+                  detail="Empties the plan for everyone. Asks first."
+                  onClick={() => { setMenuOpen(false); onStartFresh() }}
+                />
 
                 {/* The plan is shared now. Saying where it lives is the answer
                     to "will the others see this?", which is the first thing
@@ -180,14 +213,31 @@ export function TopBar({
   )
 }
 
-function MenuItem({ children, onClick }: { children: React.ReactNode; onClick: () => void }) {
+function MenuHeading({ children }: { children: React.ReactNode }) {
+  return (
+    <p className="px-3 pt-2 pb-0.5 text-[10px] font-semibold tracking-wide text-[var(--ink-faint)] uppercase">
+      {children}
+    </p>
+  )
+}
+
+function MenuItem({
+  label,
+  detail,
+  onClick,
+}: {
+  label: string
+  detail: string
+  onClick: () => void
+}) {
   return (
     <button
       type="button"
       onClick={onClick}
-      className="block w-full px-3 py-1.5 text-left text-[12.5px] text-[var(--ink)] transition-colors hover:bg-[var(--surface-sunk)]"
+      className="block w-full px-3 py-1.5 text-left transition-colors hover:bg-[var(--surface-sunk)]"
     >
-      {children}
+      <span className="block text-[12.5px] font-medium text-[var(--ink)]">{label}</span>
+      <span className="block text-[11px] leading-snug text-[var(--ink-faint)]">{detail}</span>
     </button>
   )
 }
