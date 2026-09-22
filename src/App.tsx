@@ -24,6 +24,7 @@ import { DragGhost } from '@/components/schedule/DragGhost'
 import { Inspector } from '@/components/panels/Inspector'
 import { RotationDialog } from '@/components/panels/RotationDialog'
 import { BookingDialog } from '@/components/panels/BookingDialog'
+import { ImportDialog } from '@/components/panels/ImportDialog'
 import { StaffPage } from '@/components/pages/StaffPage'
 import { ActivitiesPage } from '@/components/pages/ActivitiesPage'
 import { VenuesPage } from '@/components/pages/VenuesPage'
@@ -49,6 +50,7 @@ export default function App() {
   const [rotationOpen, setRotationOpen] = useState(false)
   const [editingBooking, setEditingBooking] = useState<Booking | null>(null)
   const [printOpen, setPrintOpen] = useState(false)
+  const [importOpen, setImportOpen] = useState(false)
   const [printOptions, setPrintOptions] = useState<PrintOptions>(DEFAULT_PRINT_OPTIONS)
   const [toast, setToast] = useState<string | null>(null)
   const [sync, setSync] = useState<SyncState>(() => syncState())
@@ -318,6 +320,7 @@ export default function App() {
         onExportCsv={() => exportCsv(doc, activities, venueMap)}
         onBackup={() => exportBackup(doc)}
         onRestore={() => void restoreBackup()}
+        onImport={() => setImportOpen(true)}
         onPrint={() => setPrintOpen(true)}
         sync={sync}
         onRetrySync={() => void refresh()}
@@ -560,6 +563,25 @@ export default function App() {
             )
           }}
           onClose={() => setRotationOpen(false)}
+        />
+      )}
+
+      {importOpen && (
+        <ImportDialog
+          site={doc.site}
+          catalogue={activityList}
+          onImport={(result) => {
+            useStore.getState().importStays({
+              bookings: result.bookings.map((entry) => entry.booking),
+              blocks: result.bookings.flatMap((entry) => entry.blocks),
+              activities: result.newActivities,
+            })
+            const sessions = result.bookings.reduce((total, entry) => total + entry.blocks.length, 0)
+            setToast(
+              `Imported ${result.bookings.length} school${result.bookings.length === 1 ? '' : 's'} and ${sessions} sessions.`,
+            )
+          }}
+          onClose={() => setImportOpen(false)}
         />
       )}
 

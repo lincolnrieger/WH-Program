@@ -100,6 +100,12 @@ interface State {
   }) => void
   copyDay: (bookingId: string, fromDate: string, toDate: string) => void
   clearDay: (bookingId: string, date: string) => void
+  /** Adds whole stays read out of the old spreadsheets, alongside what's there. */
+  importStays: (input: {
+    bookings: Booking[]
+    blocks: Block[]
+    activities: Activity[]
+  }) => void
 
   // ── catalogue editing ──
   saveActivity: (activity: Activity) => void
@@ -530,6 +536,34 @@ export const useStore = create<State>((set, get) => {
         ...doc,
         blocks: doc.blocks.filter((b) => !(b.bookingId === bookingId && b.date === date)),
       })),
+
+    /**
+     * Brings in stays read out of the old workbooks.
+     *
+     * One commit for the lot: a term's import is a few hundred sessions, and
+     * sending them as one change keeps it to a single write and a single step
+     * on the undo stack — so a migration that went wrong is one Ctrl+Z away.
+     */
+    importStays: ({ bookings, blocks, activities }) => {
+      if (bookings.length === 0) return
+      const known = new Set(resolveActivities(get().doc).map((a) => a.id))
+      const added = activities.filter((activity) => !known.has(activity.id))
+
+      commit((doc) => ({
+        ...doc,
+        bookings: [...doc.bookings, ...bookings],
+        blocks: [...doc.blocks, ...blocks],
+        customActivities: [...doc.customActivities, ...added],
+      }))
+
+      const first = bookings[0]
+      set({
+        activeBookingId: first.id,
+        activeDate: first.startDate,
+        page: 'plan',
+        selection: { blockIds: [] },
+      })
+    },
 
     saveActivity: (activity) =>
       commit((doc) => {
