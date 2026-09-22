@@ -223,7 +223,6 @@ function commit(
       kind: 'activity',
       activityId: activity.id,
       delivery: activity.deliveries[0] ?? 'staff',
-      staffIds: [],
       venueId: activity.venueIds[0],
     }
     const id = store.addBlock(block)
@@ -247,8 +246,7 @@ function commit(
           : booking.groups.map((g) => g.id),
       kind: routine.kind,
       title: routine.title,
-      delivery: 'staff',
-      staffIds: [],
+      delivery: routine.delivery ?? 'staff',
       colour: routine.colour,
     }
     const id = store.addBlock(block)

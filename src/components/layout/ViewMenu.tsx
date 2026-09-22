@@ -131,12 +131,7 @@ export function ViewMenu({
 
             <div className="mt-1 space-y-1 border-t border-[var(--line)] pt-2">
               <Toggle
-                label="Highlight clashes"
-                checked={prefs.showConflicts}
-                onChange={(showConflicts) => onChange({ showConflicts })}
-              />
-              <Toggle
-                label="Show venue and staff on blocks"
+                label="Show the venue on blocks"
                 checked={prefs.showBlockDetail}
                 onChange={(showBlockDetail) => onChange({ showBlockDetail })}
               />

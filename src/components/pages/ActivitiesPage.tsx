@@ -55,11 +55,7 @@ export function ActivitiesPage({
       sites: [site],
       colour: '#4472c4',
       defaultDurationMin: 90,
-      setupMin: 10,
-      packdownMin: 10,
       venueIds: [],
-      minStaff: 1,
-      conflictsWith: [],
       deliveries: ['staff'],
     })
   }
@@ -70,7 +66,8 @@ export function ActivitiesPage({
         <div>
           <h1 className="text-[14px] font-semibold text-[var(--ink)]">Activities</h1>
           <p className="text-[11.5px] text-[var(--ink-soft)]">
-            {visible.length} shown · edits here change what the scheduler checks
+            {visible.length} shown · colours and times set here are what the app and its
+            exports use
           </p>
         </div>
         <div className="ml-auto flex flex-wrap items-center gap-1.5">
@@ -121,13 +118,10 @@ export function ActivitiesPage({
               <tr className="border-b border-[var(--line)] text-left text-[11px] text-[var(--ink-faint)]">
                 <Th className="pl-3">Activity</Th>
                 <Th className="text-right">Runs</Th>
-                <Th className="text-right">Set-up</Th>
-                <Th className="text-right">Pack-down</Th>
-                <Th className="text-right">Staff</Th>
-                <Th className="text-right">Cap</Th>
                 <Th>Venue</Th>
                 <Th>Offered as</Th>
-                <Th className="pr-3">Rules</Th>
+                <Th>Runs at</Th>
+                <Th className="pr-3">Notes</Th>
               </tr>
             </thead>
             <tbody>
@@ -151,34 +145,22 @@ export function ActivitiesPage({
                         <span className="font-medium text-[var(--ink)]">{activity.name}</span>
                         {custom && <Tag>added</Tag>}
                         {edited && <Tag>edited</Tag>}
-                        {activity.exclusive && <Tag title="Only one group at a time">exclusive</Tag>}
                       </span>
                     </td>
                     <td className="tnum text-right text-[var(--ink-soft)]">
                       {formatDuration(activity.defaultDurationMin)}
                     </td>
-                    <td className="tnum text-right text-[var(--ink-faint)]">{activity.setupMin}m</td>
-                    <td className="tnum text-right text-[var(--ink-faint)]">
-                      {activity.packdownMin}m
-                    </td>
-                    <td className="tnum text-right text-[var(--ink-soft)]">
-                      {activity.minStaff || '—'}
-                    </td>
-                    <td className="tnum text-right text-[var(--ink-soft)]">
-                      {activity.capacity ?? '—'}
-                    </td>
-                    <td className="max-w-[140px] truncate text-[var(--ink-soft)]">
+                    <td className="max-w-[160px] truncate text-[var(--ink-soft)]">
                       {activity.venueIds.map((id) => venueNames.get(id) ?? id).join(', ') || '—'}
                     </td>
                     <td className="max-w-[150px] truncate text-[11.5px] text-[var(--ink-faint)]">
                       {activity.deliveries.map((d) => DELIVERY_LABELS[d]).join(', ')}
                     </td>
-                    <td className="max-w-[160px] truncate pr-3 text-[11.5px] text-[var(--ink-faint)]">
-                      {activity.conflictsWith.length > 0
-                        ? `${activity.conflictsWith.length} clash rule${activity.conflictsWith.length === 1 ? '' : 's'}`
-                        : activity.notes
-                          ? activity.notes
-                          : '—'}
+                    <td className="max-w-[110px] truncate text-[11.5px] text-[var(--ink-faint)]">
+                      {activity.sites.map((s) => (s === 'woodhouse' ? 'Woodhouse' : 'Roonka')).join(', ')}
+                    </td>
+                    <td className="max-w-[200px] truncate pr-3 text-[11.5px] text-[var(--ink-faint)]">
+                      {activity.notes ?? '—'}
                     </td>
                   </tr>
                 )
@@ -191,7 +173,6 @@ export function ActivitiesPage({
       {editing && (
         <ActivityDialog
           activity={editing}
-          allActivities={activities}
           venues={venues}
           dark={dark}
           onSave={saveActivity}

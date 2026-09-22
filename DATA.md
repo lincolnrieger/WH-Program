@@ -14,26 +14,31 @@ Itinerary) and the *Key + Activity Notes* sheet (Sample Itinerary).
 
 Carried across:
 
-- **Colours**, verbatim. `Bouldering` is still `#ffc000`, `Challenge Hill` still
-  `#ff3399`. On screen the colour is used as a soft tint plus a saturated left
-  rail rather than a solid fill, because forty saturated colours at screen
-  density is unreadable — but the hue you're used to is the hue you see.
-- **Set-up and pack-down times** from the Sample Itinerary notes columns. These
-  drive the *tight turnaround* check.
-- **Clash rules** from the "General Notes" column. For example *"Don't run at the
-  same time as Low Ropes"* on Bouldering + Gaga Ball became
-  `conflictsWith: ['low-ropes']`.
+- **Colours**, cell for cell. `Bouldering` is `#ffc000`, `Challenge Hill` is
+  `#ff3399`, `Team Challenges` is `#70ad47`. Where the sheet used an Excel theme
+  colour rather than a literal RGB one, the theme has been resolved to its hex
+  value — the Office theme, so accent2 `#ed7d31` for Laser Skirmish and accent6
+  `#70ad47` for Team Challenges.
 - **Durations** from the notes where stated (Photo Hunt 45 min, Orienteering
   45 min or 1.5 hr), otherwise the 90-minute slot the sheets use throughout.
+- **Notes** from the "General Notes" column, shown on the activity in the
+  palette and the inspector. They're guidance for whoever is planning, not
+  rules the app enforces.
 
-Added, because the app can use them and a spreadsheet can't:
+Added, because the app can use it and a spreadsheet can't:
 
-- `venueIds` — which space the activity uses, so two schools can't be sent to the
-  same place at once.
-- `capacity` and `minStaff` — estimates, from the notes where stated. **Worth a
-  review**; they only produce warnings, never blocks.
-- `exclusive` — set on activities with a single set of equipment (Tube Slide,
-  Laser Skirmish, Challenge Hill, Low Ropes, the kayaking activities).
+- `venueIds` — which space the activity uses, so the itinerary can print it.
+- `trainingNames` — the names the same activity goes by in the training
+  workbook, so the Staff page can match sign-offs that are worded differently.
+
+Colours in the code are **defaults**. Changing one on the Activities page stores
+an override in the database, and that is what the app and its exports use from
+then on — so the key can move on without a deploy.
+
+On screen the colour is used as a soft tint plus a saturated left rail rather
+than a solid fill, because forty saturated colours at screen density is
+unreadable. Printed sheets and the Excel export use the colour itself, since
+matching the existing workbooks is the whole point of them.
 
 ---
 
@@ -42,7 +47,8 @@ Added, because the app can use them and a spreadsheet can't:
 **Source:** the location column of the *Activities Colour Key* sheet (Survivor
 Shed, Bunk Pit, Ice Blocking Field, Brownsea, Craft Room, Wetland, St George
 Field, Manor Creek, Henders Pit, Enviro Room…), plus the buildings named in the
-booking headers of the holistic sheets.
+booking headers of the holistic sheets. That column is colour-coded too; the
+app doesn't use venue colours anywhere, so they weren't carried across.
 **Lives in:** `src/data/venues.ts`
 
 ---
@@ -65,8 +71,10 @@ carried across:
 | Amber `#FFC000` | Wants to learn | `wants_to_learn` |
 | Red `#FF0000` | Does not want to learn | `no` |
 
-Only `trainer` and `can_run` count as signed off. The app warns — it never stops
-you — when someone else is rostered on.
+Only `trainer` and `can_run` count as signed off, which is what the per-person
+count on the Staff page reports. Nothing else in the app reads it: the schedule
+doesn't name staff, so this table answers "who can run Laser Skirmish?" and
+leaves rostering to whoever does rostering.
 
 People on both sheets are merged into one record with a per-site competency list,
 so someone signed off for Survivor at Woodhouse but not at Roonka is handled
@@ -183,13 +191,16 @@ Dates outside any term read as *School holidays*.
 
 ## What wasn't carried across
 
-- **Staff rosters** (the *Itinerary — 3 groups + Staffing* sheet). The app
-  assigns staff per session rather than as a shift. It does work out each
-  person's continuous shift from those sessions — that's what the five-hour
-  break check runs on, and what the inspector warns about before you add
-  someone — but start and finish times for a day aren't rostered directly.
+- **Staff rosters** (the *Itinerary — 3 groups + Staffing* sheet), deliberately.
+  Nothing in the schedule names a staff member, so a session has no roster to
+  print and the app has no opinion on who should run it. Rostering is a separate
+  job; the **Staff** page is the reference table it would read from.
+- **Set-up and pack-down times, capacities and staffing numbers.** These existed
+  to feed scheduling checks the app no longer runs, so they aren't part of the
+  activity any more. The notes column they came from is still carried across and
+  still shown to whoever is planning.
 - **Roonka-specific venues** are thinner than the Woodhouse list — the source
   sheet doesn't name locations for Roonka activities. Add them on the **Venues**
-  page and clash detection will start covering them.
+  page.
 - **Junior programs.** The Woodhouse training sheet ends with
   *"JUNIOR Programs - add please"*, so there was nothing to import.

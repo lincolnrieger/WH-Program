@@ -1,39 +1,36 @@
-import { useMemo, useState } from 'react'
-import type { Activity, Booking, Issue, Site } from '@/types'
+import { useState } from 'react'
+import type { Activity, Booking, Site } from '@/types'
 import { PACKAGE_LABELS } from '@/types'
 import { formatDate } from '@/lib/time'
 import { ActivityPalette } from '@/components/palette/ActivityPalette'
-import { ConflictPanel } from '@/components/panels/ConflictPanel'
 import { Button, SectionTitle, cx } from '@/components/ui/primitives'
 
-type Tab = 'activities' | 'bookings' | 'checks'
+type Tab = 'activities' | 'bookings'
 
 export function Sidebar({
-  activities, site, dark, search, onSearch, onQuickAdd, canAdd,
+  activities, picked, site, dark, search, onSearch, onQuickAdd, canAdd,
+  onAddCustom, onUnpick, onClearPicked,
   bookings, activeBookingId, onSelectBooking, onNewBooking, onEditBooking,
-  issues, onFocusIssue,
 }: {
   activities: Activity[]
+  /** Activities set aside for manual dragging, shown above the full list. */
+  picked: Activity[]
   site: Site
   dark: boolean
   search: string
   onSearch: (value: string) => void
   onQuickAdd: (payload: { type: 'activity'; id: string } | { type: 'routine'; id: string }) => void
   canAdd: boolean
+  onAddCustom: (name: string) => void
+  onUnpick: (id: string) => void
+  onClearPicked: () => void
   bookings: Booking[]
   activeBookingId: string | null
   onSelectBooking: (id: string) => void
   onNewBooking: () => void
   onEditBooking: (id: string) => void
-  issues: Issue[]
-  onFocusIssue: (issue: Issue) => void
 }) {
   const [tab, setTab] = useState<Tab>('activities')
-
-  const errorCount = useMemo(
-    () => issues.filter((issue) => issue.severity === 'error').length,
-    [issues],
-  )
 
   return (
     <nav className="no-print flex h-full w-[264px] shrink-0 flex-col border-r border-[var(--line)] bg-[var(--surface)]">
@@ -41,7 +38,6 @@ export function Sidebar({
         {([
           ['activities', 'Activities'],
           ['bookings', 'Schools'],
-          ['checks', 'Checks'],
         ] as const).map(([key, label]) => (
           <button
             key={key}
@@ -57,11 +53,6 @@ export function Sidebar({
             )}
           >
             {label}
-            {key === 'checks' && errorCount > 0 && (
-              <span className="tnum ml-1 rounded-full bg-[var(--danger)] px-1.5 text-[10px] font-semibold text-white">
-                {errorCount}
-              </span>
-            )}
             {tab === key && (
               <span className="absolute inset-x-2 -bottom-px h-0.5 rounded-full bg-[var(--brand)]" />
             )}
@@ -73,12 +64,16 @@ export function Sidebar({
         {tab === 'activities' && (
           <ActivityPalette
             activities={activities}
+            picked={picked}
             site={site}
             dark={dark}
             search={search}
             onSearch={onSearch}
             onQuickAdd={onQuickAdd}
             canAdd={canAdd}
+            onAddCustom={onAddCustom}
+            onUnpick={onUnpick}
+            onClearPicked={onClearPicked}
           />
         )}
 
@@ -140,8 +135,6 @@ export function Sidebar({
             </div>
           </div>
         )}
-
-        {tab === 'checks' && <ConflictPanel issues={issues} onFocus={onFocusIssue} />}
       </div>
     </nav>
   )

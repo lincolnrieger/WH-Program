@@ -276,19 +276,14 @@ Edit `src/data/activities.ts`. Each entry looks like:
   sites: ['woodhouse'],          // 'woodhouse' and/or 'roonka'
   colour: '#ffc000',             // from the Activities Colour Key sheet
   defaultDurationMin: 90,
-  setupMin: 5,
-  packdownMin: 5,
   venueIds: ['bouldering-wall'], // must match an id in venues.ts
-  capacity: 30,                  // omit if uncapped
-  minStaff: 1,
-  exclusive: true,               // only one group on site can do it at a time
-  conflictsWith: [],             // ids that mustn't run at the same time
   deliveries: ['staff', 'self_led'],
+  notes: 'Anything worth telling whoever is planning.',
 }
 ```
 
-`conflictsWith` only needs to be set on one side of a pair — the check looks
-both ways.
+`deliveries` decides the suffix on the printed line: `teacher_led` prints as
+`- TL`, `self_led` as `- Self Led`.
 
 ### Adding a venue
 

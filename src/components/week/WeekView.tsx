@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react'
-import type { Activity, Block, Booking, Issue } from '@/types'
+import type { Activity, Block, Booking } from '@/types'
 import { blockTitle, bookingHeadline, bookingSubhead } from '@/lib/exportImport'
 import { blockPalette } from '@/lib/colour'
 import { addDays, dateRange, formatDate, formatTime, startOfWeek, weekdayShort } from '@/lib/time'
@@ -18,15 +18,12 @@ export interface WeekViewProps {
   blocks: Block[]
   activities: Map<string, Activity>
   venueNames: Map<string, string>
-  staffNames: Map<string, string>
-  issues: Issue[]
   selection: string[]
   highlightIds: string[]
   dayStartMin: number
   dayEndMin: number
   zoom: number
   dark: boolean
-  showConflicts: boolean
   showDetail: boolean
   onSelect: (blockId: string, additive: boolean) => void
   onClearSelection: () => void
@@ -47,8 +44,8 @@ export interface WeekViewProps {
  * can go.
  */
 export function WeekView({
-  bookings, date, blocks, activities, venueNames, staffNames, issues,
-  selection, highlightIds, dayStartMin, dayEndMin, zoom, dark, showConflicts, showDetail,
+  bookings, date, blocks, activities, venueNames,
+  selection, highlightIds, dayStartMin, dayEndMin, zoom, dark, showDetail,
   onSelect, onClearSelection, onOpenBooking, onNewBooking, onDateChange,
 }: WeekViewProps) {
   const [mode, setMode] = useState<SiteMode>('day')
@@ -76,8 +73,6 @@ export function WeekView({
       ),
     [inScope, weekDays],
   )
-
-  const dayIssues = useMemo(() => issues.filter((issue) => issue.date === date), [issues, date])
 
   const term = termWeekOfWeek(weekStart)
   const shown = mode === 'day' ? onSite : onSiteThisWeek
@@ -217,15 +212,12 @@ export function WeekView({
                     blocks={dayBlocks}
                     activities={activities}
                     venueNames={venueNames}
-                    staffNames={staffNames}
-                    issues={dayIssues}
                     selection={selection}
                     highlightIds={highlightIds}
                     dayStartMin={dayStartMin}
                     dayEndMin={dayEndMin}
                     zoom={zoom}
                     dark={dark}
-                    showConflicts={showConflicts}
                     showDetail={showDetail}
                     onSelect={onSelect}
                     onBackgroundClick={onClearSelection}
@@ -243,7 +235,6 @@ export function WeekView({
           activeDate={date}
           blocks={blocks}
           activities={activities}
-          issues={issues}
           dark={dark}
           onOpenBooking={onOpenBooking}
           onDateChange={onDateChange}
@@ -260,24 +251,17 @@ export function WeekView({
  * what you actually want to read is "who's here, doing what, on which day".
  */
 function SiteWeek({
-  bookings, days, activeDate, blocks, activities, issues, dark, onOpenBooking, onDateChange,
+  bookings, days, activeDate, blocks, activities, dark, onOpenBooking, onDateChange,
 }: {
   bookings: Booking[]
   days: string[]
   activeDate: string
   blocks: Block[]
   activities: Map<string, Activity>
-  issues: Issue[]
   dark: boolean
   onOpenBooking: (id: string) => void
   onDateChange: (date: string) => void
 }) {
-  const errorDays = useMemo(() => {
-    const set = new Set<string>()
-    for (const issue of issues) if (issue.severity === 'error') set.add(issue.date)
-    return set
-  }, [issues])
-
   const today = new Date().toISOString().slice(0, 10)
 
   return (
@@ -313,9 +297,6 @@ function SiteWeek({
                     </span>
                     {day === today && (
                       <span aria-label="Today" className="h-1.5 w-1.5 rounded-full bg-[var(--brand)]" />
-                    )}
-                    {errorDays.has(day) && (
-                      <span aria-label="Has clashes" className="h-1.5 w-1.5 rounded-full bg-[var(--danger)]" />
                     )}
                   </span>
                 </button>

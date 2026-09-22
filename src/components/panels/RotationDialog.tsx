@@ -8,12 +8,18 @@ import { Modal } from '@/components/ui/Modal'
 import { Button, Chip, Field, Select, cx } from '@/components/ui/primitives'
 
 /**
- * Generates the rotation staff currently build by hand: every group does every
- * activity once, and no two groups are ever on the same one at the same time.
+ * Picks the activities for a stay, then offers two ways to get them onto the
+ * grid.
  *
- * The rotation can cover any set of days in the stay at once. Across days it
- * keeps counting rather than restarting, so a three-day camp with four slots a
- * day works through twelve activities instead of repeating the first four.
+ * **Sort automatically** lays them out as the rotation staff build by hand:
+ * every group does every activity once, and no two groups are on the same one
+ * at the same time. Across days it keeps counting rather than restarting, so a
+ * three-day camp with four slots a day works through twelve activities instead
+ * of repeating the first four.
+ *
+ * **Add to list** does no arranging at all. The chosen activities go to the top
+ * of the palette and you drag them into place yourself — which is what you want
+ * when the shape of the week is in your head rather than in a rule.
  */
 export function RotationDialog({
   booking,
@@ -23,6 +29,7 @@ export function RotationDialog({
   dayStartMin,
   dayEndMin,
   onGenerate,
+  onAddToList,
   onClose,
 }: {
   booking: Booking
@@ -42,6 +49,8 @@ export function RotationDialog({
     continueAcrossDays: boolean
     replaceExisting: boolean
   }) => void
+  /** Sends the chosen activities to the palette instead of arranging them. */
+  onAddToList: (activityIds: string[]) => void
   onClose: () => void
 }) {
   const stayDates = useMemo(() => bookingDates(booking), [booking])
@@ -52,6 +61,7 @@ export function RotationDialog({
   const [delivery, setDelivery] = useState<Delivery>('staff')
   const [continueAcrossDays, setContinueAcrossDays] = useState(true)
   const [replaceExisting, setReplaceExisting] = useState(false)
+  const [showPreview, setShowPreview] = useState(false)
 
   // Slots come from the gaps on the first selected day: the meals and logistics
   // sit at the same times every day, so one day's shape does for all of them.
@@ -68,26 +78,23 @@ export function RotationDialog({
   const [droppedSlots, setDroppedSlots] = useState<number[]>([])
   const slots = suggested.filter((_, index) => !droppedSlots.includes(index))
 
-  const canGenerate = dates.length > 0 && slots.length > 0 && activityIds.length > 0 && groupIds.length > 0
-  const perDay = slots.length * Math.min(groupIds.length, activityIds.length)
-  const total = perDay * dates.length
+  const chosen = activityIds.length > 0
+  const canSort = dates.length > 0 && slots.length > 0 && chosen && groupIds.length > 0
+  const total = slots.length * Math.min(groupIds.length, activityIds.length) * dates.length
 
   const matrix = useMemo(
     () =>
-      canGenerate
+      canSort && showPreview
         ? rotationMatrix({ dates, slots, activityIds, groupIds, continueAcrossDays })
         : [],
-    [canGenerate, dates, slots, activityIds, groupIds, continueAcrossDays],
+    [canSort, showPreview, dates, slots, activityIds, groupIds, continueAcrossDays],
   )
 
-  const activityById = useMemo(
-    () => new Map(activities.map((a) => [a.id, a])),
-    [activities],
-  )
+  const activityById = useMemo(() => new Map(activities.map((a) => [a.id, a])), [activities])
 
-  const shortOfActivities = groupIds.length > activityIds.length && activityIds.length > 0
+  const shortOfActivities = groupIds.length > activityIds.length && chosen
   const slotsNeeded = dates.length * slots.length
-  const repeats = continueAcrossDays && activityIds.length > 0 && slotsNeeded > activityIds.length
+  const repeats = continueAcrossDays && chosen && slotsNeeded > activityIds.length
 
   function toggleDate(day: string) {
     setDates((current) =>
@@ -99,7 +106,7 @@ export function RotationDialog({
 
   return (
     <Modal
-      title="Build a rotation"
+      title="Choose activities"
       description={booking.schoolName}
       width={760}
       onClose={onClose}
@@ -107,8 +114,19 @@ export function RotationDialog({
         <>
           <Button onClick={onClose}>Cancel</Button>
           <Button
+            disabled={!chosen}
+            title="Put them at the top of the palette and place them by hand"
+            onClick={() => {
+              onAddToList(activityIds)
+              onClose()
+            }}
+          >
+            Add {activityIds.length || ''} to list
+          </Button>
+          <Button
             variant="primary"
-            disabled={!canGenerate}
+            disabled={!canSort}
+            title="Lay them out as a rotation across the days and slots chosen below"
             onClick={() => {
               onGenerate({
                 dates,
@@ -122,92 +140,15 @@ export function RotationDialog({
               onClose()
             }}
           >
-            Create {total} block{total === 1 ? '' : 's'}
+            Sort automatically ({total})
           </Button>
         </>
       }
     >
       <div className="space-y-4">
         <Field
-          label={`Days (${dates.length} of ${stayDates.length})`}
-          hint="The rotation is laid over every day you pick, using the same time slots."
-        >
-          <div className="flex flex-wrap items-center gap-1">
-            {stayDates.map((day, index) => (
-              <Chip key={day} active={dates.includes(day)} onClick={() => toggleDate(day)}>
-                <span className="tnum">
-                  Day {index + 1} · {weekdayShort(day)} {Number(day.slice(8))}
-                </span>
-              </Chip>
-            ))}
-            <span className="mx-1 h-4 w-px bg-[var(--line)]" aria-hidden />
-            <Button size="sm" variant="ghost" onClick={() => setDates(stayDates)}>
-              All days
-            </Button>
-            <Button size="sm" variant="ghost" onClick={() => setDates([date])}>
-              Just {weekdayShort(date)}
-            </Button>
-          </div>
-        </Field>
-
-        <Field
-          label="Time slots"
-          hint={`Taken from the gaps left on ${formatDate(shapeDay)} by the meals and logistics already there.`}
-        >
-          {suggested.length === 0 ? (
-            <p className="text-[12px] text-[var(--ink-soft)]">
-              No free slots found on {formatDate(shapeDay)}. Apply a day template to that day first,
-              or clear some blocks.
-            </p>
-          ) : (
-            <div className="flex flex-wrap gap-1">
-              {suggested.map((slot, index) => (
-                <Chip
-                  key={index}
-                  active={!droppedSlots.includes(index)}
-                  onClick={() =>
-                    setDroppedSlots((current) =>
-                      current.includes(index)
-                        ? current.filter((i) => i !== index)
-                        : [...current, index],
-                    )
-                  }
-                >
-                  {formatTimeFull(slot.startMin)}–{formatTimeFull(slot.endMin)}
-                  <span className="ml-1 opacity-60">
-                    {formatDuration(slot.endMin - slot.startMin)}
-                  </span>
-                </Chip>
-              ))}
-            </div>
-          )}
-        </Field>
-
-        <Field label="Groups">
-          <div className="flex flex-wrap gap-1">
-            {booking.groups.map((group) => (
-              <Chip
-                key={group.id}
-                active={groupIds.includes(group.id)}
-                onClick={() =>
-                  setGroupIds((current) =>
-                    current.includes(group.id)
-                      ? current.filter((id) => id !== group.id)
-                      : [...current, group.id],
-                  )
-                }
-              >
-                {group.name}
-              </Chip>
-            ))}
-          </div>
-        </Field>
-
-        <Field
           label={`Activities (${activityIds.length} chosen)`}
-          hint={`Pick at least as many as there are groups. ${slotsNeeded} slot${
-            slotsNeeded === 1 ? '' : 's'
-          } across the days you've chosen.`}
+          hint="Pick them here, then either sort them into a rotation or add them to the palette to place yourself."
         >
           <div className="max-h-48 overflow-y-auto rounded-md border border-[var(--line)] p-1">
             <div className="flex flex-wrap gap-1">
@@ -233,53 +174,147 @@ export function RotationDialog({
               })}
             </div>
           </div>
-          {shortOfActivities && (
-            <p className="mt-1 text-[11.5px] text-[var(--warn)]">
-              {groupIds.length} groups but only {activityIds.length} activities — the last{' '}
-              {groupIds.length - activityIds.length} group(s) will be left empty rather than
-              doubled up.
-            </p>
-          )}
-          {repeats && (
-            <p className="mt-1 text-[11.5px] text-[var(--ink-faint)]">
-              {slotsNeeded} slots and {activityIds.length} activities — the rotation will come
-              back around and repeat some.
-            </p>
+          {activityIds.length > 0 && (
+            <Button size="sm" variant="ghost" className="mt-1" onClick={() => setActivityIds([])}>
+              Clear selection
+            </Button>
           )}
         </Field>
 
-        <div className="grid grid-cols-2 gap-3">
-          <Field label="Delivery">
-            <Select value={delivery} onChange={(event) => setDelivery(event.target.value as Delivery)}>
-              {(['staff', 'teacher_led', 'self_led'] as const).map((value) => (
-                <option key={value} value={value}>
-                  {DELIVERY_LABELS[value]}
-                </option>
-              ))}
-            </Select>
-          </Field>
+        <div className="rounded-lg border border-[var(--line)] p-3">
+          <p className="mb-2.5 text-[11px] font-semibold tracking-wide text-[var(--ink-faint)] uppercase">
+            Only used by “Sort automatically”
+          </p>
 
-          <div className="flex flex-col justify-end gap-1 pb-0.5">
-            <Toggle
-              label="Carry on across days"
-              hint="Off restarts the rotation each morning, so every day looks the same."
-              checked={continueAcrossDays}
-              onChange={setContinueAcrossDays}
-            />
-            <Toggle
-              label="Replace activities already there"
-              hint="Meals and logistics are left alone either way."
-              checked={replaceExisting}
-              onChange={setReplaceExisting}
-            />
+          <div className="space-y-3">
+            <Field
+              label={`Days (${dates.length} of ${stayDates.length})`}
+              hint="The rotation is laid over every day you pick, using the same time slots."
+            >
+              <div className="flex flex-wrap items-center gap-1">
+                {stayDates.map((day, index) => (
+                  <Chip key={day} active={dates.includes(day)} onClick={() => toggleDate(day)}>
+                    <span className="tnum">
+                      Day {index + 1} · {weekdayShort(day)} {Number(day.slice(8))}
+                    </span>
+                  </Chip>
+                ))}
+                <span className="mx-1 h-4 w-px bg-[var(--line)]" aria-hidden />
+                <Button size="sm" variant="ghost" onClick={() => setDates(stayDates)}>
+                  All days
+                </Button>
+                <Button size="sm" variant="ghost" onClick={() => setDates([date])}>
+                  Just {weekdayShort(date)}
+                </Button>
+              </div>
+            </Field>
+
+            <Field
+              label="Time slots"
+              hint={`Taken from the gaps left on ${formatDate(shapeDay)} by the meals and logistics already there.`}
+            >
+              {suggested.length === 0 ? (
+                <p className="text-[12px] text-[var(--ink-soft)]">
+                  No free slots found on {formatDate(shapeDay)}. Apply a day template to that day
+                  first, or add the activities to the list and place them by hand.
+                </p>
+              ) : (
+                <div className="flex flex-wrap gap-1">
+                  {suggested.map((slot, index) => (
+                    <Chip
+                      key={index}
+                      active={!droppedSlots.includes(index)}
+                      onClick={() =>
+                        setDroppedSlots((current) =>
+                          current.includes(index)
+                            ? current.filter((i) => i !== index)
+                            : [...current, index],
+                        )
+                      }
+                    >
+                      {formatTimeFull(slot.startMin)}–{formatTimeFull(slot.endMin)}
+                      <span className="ml-1 opacity-60">
+                        {formatDuration(slot.endMin - slot.startMin)}
+                      </span>
+                    </Chip>
+                  ))}
+                </div>
+              )}
+            </Field>
+
+            <Field label="Groups">
+              <div className="flex flex-wrap gap-1">
+                {booking.groups.map((group) => (
+                  <Chip
+                    key={group.id}
+                    active={groupIds.includes(group.id)}
+                    onClick={() =>
+                      setGroupIds((current) =>
+                        current.includes(group.id)
+                          ? current.filter((id) => id !== group.id)
+                          : [...current, group.id],
+                      )
+                    }
+                  >
+                    {group.name}
+                  </Chip>
+                ))}
+              </div>
+              {shortOfActivities && (
+                <p className="mt-1 text-[11.5px] text-[var(--warn)]">
+                  {groupIds.length} groups but only {activityIds.length} activities — the last{' '}
+                  {groupIds.length - activityIds.length} group(s) will be left empty rather than
+                  doubled up.
+                </p>
+              )}
+              {repeats && (
+                <p className="mt-1 text-[11.5px] text-[var(--ink-faint)]">
+                  {slotsNeeded} slots and {activityIds.length} activities — the rotation will come
+                  back around and repeat some.
+                </p>
+              )}
+            </Field>
+
+            <div className="grid grid-cols-2 gap-3">
+              <Field label="Delivery">
+                <Select
+                  value={delivery}
+                  onChange={(event) => setDelivery(event.target.value as Delivery)}
+                >
+                  {(['staff', 'teacher_led', 'self_led'] as const).map((value) => (
+                    <option key={value} value={value}>
+                      {DELIVERY_LABELS[value]}
+                    </option>
+                  ))}
+                </Select>
+              </Field>
+
+              <div className="flex flex-col justify-end gap-1 pb-0.5">
+                <Toggle
+                  label="Carry on across days"
+                  hint="Off restarts the rotation each morning, so every day looks the same."
+                  checked={continueAcrossDays}
+                  onChange={setContinueAcrossDays}
+                />
+                <Toggle
+                  label="Replace activities already there"
+                  hint="Meals and logistics are left alone either way."
+                  checked={replaceExisting}
+                  onChange={setReplaceExisting}
+                />
+              </div>
+            </div>
+
+            {canSort && (
+              <Button size="sm" variant="ghost" onClick={() => setShowPreview((v) => !v)}>
+                {showPreview ? 'Hide preview' : `Preview the ${total} blocks`}
+              </Button>
+            )}
           </div>
         </div>
 
         {matrix.length > 0 && (
           <div>
-            <p className="mb-1 text-[11px] font-medium tracking-wide text-[var(--ink-faint)] uppercase">
-              Preview · {total} blocks over {dates.length} day{dates.length === 1 ? '' : 's'}
-            </p>
             <div className="max-h-64 overflow-auto rounded-md border border-[var(--line)]">
               <table className="w-full border-collapse text-[11.5px]">
                 <thead className="sticky top-0 z-10">

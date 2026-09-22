@@ -1,15 +1,16 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
-import type { Booking, Issue } from '@/types'
+import type { Booking } from '@/types'
 import { SITES } from '@/types'
 import { ROUTINES } from '@/data/activities'
 import {
-  resolveActivities, resolveActivityMap, resolveStaff, resolveStaffMap, resolveVenueMap,
-  resolveVenues,
+  resolveActivities, resolveActivityMap, resolveStaff, resolveVenueMap, resolveVenues,
 } from '@/data/resolve'
-import { computeIssues, useStore } from '@/store/useStore'
+import { useStore } from '@/store/useStore'
 import { flushNow, refresh, startSync, subscribeToSync, syncState, type SyncState } from '@/store/sync'
 import { useDragController } from '@/hooks/useDragController'
 import { useKeyboardShortcuts } from '@/hooks/useKeyboardShortcuts'
+import { exportBackup, pickBackupFile, readBackup } from '@/lib/backup'
+import { exportBookingWorkbook, exportHolisticWorkbook } from '@/lib/excelExport'
 import { exportCsv } from '@/lib/exportImport'
 import { suggestSlots } from '@/lib/rotation'
 import { addDays, startOfWeek } from '@/lib/time'
@@ -41,6 +42,7 @@ export default function App() {
   const selection = useStore((s) => s.selection.blockIds)
   const highlightIds = useStore((s) => s.highlightIds)
   const search = useStore((s) => s.search)
+  const pickedActivityIds = useStore((s) => s.pickedActivityIds)
   const canUndo = useStore((s) => s.past.length > 0)
   const canRedo = useStore((s) => s.future.length > 0)
 
@@ -97,20 +99,21 @@ export default function App() {
   const venueList = useMemo(() => resolveVenues(doc), [doc])
   const venueMap = useMemo(() => resolveVenueMap(doc), [doc])
   const staffList = useMemo(() => resolveStaff(doc), [doc])
-  const staffMap = useMemo(() => resolveStaffMap(doc), [doc])
-  const issues = useMemo(() => computeIssues(doc), [doc])
 
   const paletteActivities = useMemo(
     () => activityList.filter((a) => a.sites.includes(doc.site)),
     [activityList, doc.site],
   )
+  const pickedActivities = useMemo(
+    () =>
+      pickedActivityIds
+        .map((id) => activities.get(id))
+        .filter((activity): activity is NonNullable<typeof activity> => Boolean(activity)),
+    [pickedActivityIds, activities],
+  )
   const venueNames = useMemo(
     () => new Map([...venueMap].map(([id, venue]) => [id, venue.name])),
     [venueMap],
-  )
-  const staffNames = useMemo(
-    () => new Map([...staffMap].map(([id, person]) => [id, person.name])),
-    [staffMap],
   )
 
   const siteBookings = useMemo(
@@ -128,17 +131,6 @@ export default function App() {
 
   const date = activeDate ?? booking?.startDate ?? new Date().toISOString().slice(0, 10)
 
-  const errorDates = useMemo(() => {
-    const set = new Set<string>()
-    for (const issue of issues) if (issue.severity === 'error') set.add(issue.date)
-    return set
-  }, [issues])
-
-  const errorCount = useMemo(
-    () => issues.filter((i) => i.severity === 'error').length,
-    [issues],
-  )
-
   const handleSelect = useCallback((blockId: string, additive: boolean) => {
     useStore.getState().select([blockId], additive)
   }, [])
@@ -146,23 +138,6 @@ export default function App() {
   const handleClearSelection = useCallback(() => {
     useStore.getState().clearSelection()
   }, [])
-
-  const focusIssue = useCallback(
-    (issue: Issue) => {
-      const store = useStore.getState()
-      store.setActiveDate(issue.date)
-      if (issue.bookingId) store.setActiveBooking(issue.bookingId)
-      else if (issue.blockIds.length > 0) {
-        const first = doc.blocks.find((b) => b.id === issue.blockIds[0])
-        if (first) store.setActiveBooking(first.bookingId)
-      }
-      if (issue.blockIds.length > 0) {
-        store.select(issue.blockIds)
-        store.setHighlight(issue.blockIds)
-      }
-    },
-    [doc.blocks],
-  )
 
   /** Click-to-place from the palette: drops into the first free gap of the day. */
   const quickAdd = useCallback(
@@ -199,7 +174,6 @@ export default function App() {
           kind: 'activity',
           activityId: activity.id,
           delivery: activity.deliveries[0] ?? 'staff',
-          staffIds: [],
           venueId: activity.venueIds[0],
         })
         store.select([id])
@@ -215,8 +189,7 @@ export default function App() {
           groupIds: routine.wholeSchool ? target.groups.map((g) => g.id) : [target.groups[0].id],
           kind: routine.kind,
           title: routine.title,
-          delivery: 'staff',
-          staffIds: [],
+          delivery: routine.delivery ?? 'staff',
           colour: routine.colour,
         })
         store.select([id])
@@ -225,6 +198,15 @@ export default function App() {
     },
     [activities, prefs.dayStartMin, prefs.dayEndMin],
   )
+
+  const addCustomActivity = useCallback((name: string) => {
+    const id = useStore.getState().addCustomActivity(name)
+    setToast(
+      id
+        ? `“${name.trim()}” is ready at the top of the list — drag it onto the grid.`
+        : 'Give the activity a name first.',
+    )
+  }, [])
 
   const loadSample = useCallback(async () => {
     if (
@@ -259,6 +241,26 @@ export default function App() {
     }
   }, [])
 
+  const restoreBackup = useCallback(async () => {
+    const file = await pickBackupFile()
+    if (!file) return
+    try {
+      const restored = await readBackup(file)
+      if (
+        !confirm(
+          `Replace the whole plan with this backup — ${restored.bookings.length} school(s) and ` +
+            `${restored.blocks.length} session(s) — for everyone? This cannot be undone.`,
+        )
+      ) {
+        return
+      }
+      useStore.getState().setDoc({ ...restored, site: doc.site })
+      setToast('Backup restored.')
+    } catch (error) {
+      setToast(error instanceof Error ? error.message : 'Could not read that backup.')
+    }
+  }, [doc.site])
+
   // What the print sheet will contain, given the chosen scope. The two site
   // scopes hand over every booking and let the sheet decide — it already knows
   // which week it is drawing.
@@ -271,6 +273,26 @@ export default function App() {
     }
     return siteBookings
   }, [printOptions.scope, booking, siteBookings, date])
+
+  const exportExcel = useCallback(() => {
+    const shared = {
+      blocks: doc.blocks,
+      activities,
+      activityList,
+      site: doc.site,
+    }
+    if (printOptions.scope === 'site-day' || printOptions.scope === 'site-week') {
+      exportHolisticWorkbook({
+        ...shared,
+        bookings: siteBookings,
+        date,
+      })
+    } else if (booking) {
+      exportBookingWorkbook({ ...shared, bookings: [booking] })
+    }
+    setPrintOpen(false)
+    setToast('Spreadsheet downloaded.')
+  }, [doc.blocks, doc.site, activities, activityList, printOptions.scope, siteBookings, date, booking])
 
   const weekBounds = useMemo(() => {
     const start = startOfWeek(date)
@@ -293,9 +315,10 @@ export default function App() {
         canRedo={canRedo}
         onUndo={() => useStore.getState().undo()}
         onRedo={() => useStore.getState().redo()}
-        onExportCsv={() => exportCsv(doc, activities, venueMap, staffMap)}
+        onExportCsv={() => exportCsv(doc, activities, venueMap)}
+        onBackup={() => exportBackup(doc)}
+        onRestore={() => void restoreBackup()}
         onPrint={() => setPrintOpen(true)}
-        issueCount={errorCount}
         sync={sync}
         onRetrySync={() => void refresh()}
         onLoadSample={() => void loadSample()}
@@ -309,7 +332,6 @@ export default function App() {
           bookings={siteBookings}
           date={date}
           onDateChange={(next) => useStore.getState().setActiveDate(next)}
-          errorDates={errorDates}
         />
       )}
 
@@ -317,12 +339,16 @@ export default function App() {
         {showsGrid && (
           <Sidebar
             activities={paletteActivities}
+            picked={pickedActivities}
             site={doc.site}
             dark={prefs.theme === 'dark'}
             search={search}
             onSearch={(value) => useStore.getState().setSearch(value)}
             onQuickAdd={quickAdd}
             canAdd={Boolean(booking)}
+            onAddCustom={addCustomActivity}
+            onUnpick={(id) => useStore.getState().unpickActivity(id)}
+            onClearPicked={() => useStore.getState().clearPicked()}
             bookings={siteBookings}
             activeBookingId={activeBookingId}
             onSelectBooking={(id) => {
@@ -338,8 +364,6 @@ export default function App() {
               const found = doc.bookings.find((b) => b.id === id)
               if (found) setEditingBooking(found)
             }}
-            issues={issues}
-            onFocusIssue={focusIssue}
           />
         )}
 
@@ -368,15 +392,12 @@ export default function App() {
               blocks={doc.blocks}
               activities={activities}
               venueNames={venueNames}
-              staffNames={staffNames}
-              issues={issues}
               selection={selection}
               highlightIds={highlightIds}
               dayStartMin={prefs.dayStartMin}
               dayEndMin={prefs.dayEndMin}
               zoom={prefs.zoom}
               dark={prefs.theme === 'dark'}
-              showConflicts={prefs.showConflicts}
               showDetail={prefs.showBlockDetail}
               onSelect={handleSelect}
               onClearSelection={handleClearSelection}
@@ -401,15 +422,12 @@ export default function App() {
                 blocks={doc.blocks}
                 activities={activities}
                 venueNames={venueNames}
-                staffNames={staffNames}
-                issues={issues}
                 selection={selection}
                 highlightIds={highlightIds}
                 dayStartMin={prefs.dayStartMin}
                 dayEndMin={prefs.dayEndMin}
                 zoom={prefs.zoom}
                 dark={prefs.theme === 'dark'}
-                showConflicts={prefs.showConflicts}
                 showDetail={prefs.showBlockDetail}
                 onSelect={handleSelect}
                 onClearSelection={handleClearSelection}
@@ -437,7 +455,6 @@ export default function App() {
                     kind: 'custom',
                     title: 'New block',
                     delivery: 'staff',
-                    staffIds: [],
                   })
                   useStore.getState().select([id])
                 }}
@@ -483,7 +500,6 @@ export default function App() {
               activities={activities}
               venues={venueList}
               site={doc.site}
-              issues={issues}
               onClose={handleClearSelection}
             />
           )}
@@ -497,7 +513,6 @@ export default function App() {
         blocks={doc.blocks}
         activities={activities}
         venues={venueMap}
-        staff={staffMap}
         programName={siteName}
         options={printOptions}
         siteName={siteName}
@@ -513,6 +528,7 @@ export default function App() {
             // Let the dialog unmount before the print sheet is captured.
             window.setTimeout(() => window.print(), 60)
           }}
+          onExcel={exportExcel}
           onClose={() => setPrintOpen(false)}
           bookingName={booking?.schoolName}
           date={date}
@@ -537,6 +553,12 @@ export default function App() {
           onGenerate={(input) =>
             useStore.getState().generateRotation({ bookingId: booking.id, ...input })
           }
+          onAddToList={(ids) => {
+            useStore.getState().pickActivities(ids)
+            setToast(
+              `${ids.length} activit${ids.length === 1 ? 'y' : 'ies'} at the top of the list — drag them onto the grid.`,
+            )
+          }}
           onClose={() => setRotationOpen(false)}
         />
       )}

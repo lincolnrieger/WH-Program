@@ -31,6 +31,9 @@ CREATE TABLE IF NOT EXISTS bookings (
 
 CREATE INDEX IF NOT EXISTS bookings_by_site ON bookings (site, start_date);
 
+-- A database created before rostering was removed still has `staff_ids` and
+-- `training_staff_ids` columns. They default to '[]' and NULL and nothing reads
+-- or writes them any more, so they can be left alone.
 CREATE TABLE IF NOT EXISTS blocks (
   id                 TEXT PRIMARY KEY,
   booking_id         TEXT NOT NULL,
@@ -42,8 +45,6 @@ CREATE TABLE IF NOT EXISTS blocks (
   activity_id        TEXT,
   title              TEXT,
   delivery           TEXT NOT NULL DEFAULT 'staff',
-  staff_ids          TEXT NOT NULL DEFAULT '[]',
-  training_staff_ids TEXT,
   venue_id           TEXT,
   note               TEXT,
   locked             INTEGER NOT NULL DEFAULT 0,

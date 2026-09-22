@@ -23,13 +23,10 @@ export function WeekBar({
   bookings,
   date,
   onDateChange,
-  errorDates,
 }: {
   bookings: Booking[]
   date: string
   onDateChange: (date: string) => void
-  /** Dates with at least one clash, badged on the day button. */
-  errorDates: Set<string>
 }) {
   const [picking, setPicking] = useState(false)
 
@@ -141,12 +138,6 @@ export function WeekBar({
               >
                 {count === 0 ? 'free' : `${count} school${count === 1 ? '' : 's'}`}
               </span>
-              {errorDates.has(day) && (
-                <span
-                  aria-label="Has clashes"
-                  className="absolute -top-1 -right-1 h-2.5 w-2.5 rounded-full bg-[var(--danger)] ring-2 ring-[var(--surface)]"
-                />
-              )}
             </button>
           )
         })}

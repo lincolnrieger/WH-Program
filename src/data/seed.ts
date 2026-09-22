@@ -98,7 +98,6 @@ export function createSeedDocument(): ProgramDocument {
     kind: 'activity' as const,
     activityId: activity.id,
     delivery: 'staff' as const,
-    staffIds: [],
     venueId: activity.venueIds[0],
   }))
 

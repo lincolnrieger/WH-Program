@@ -175,20 +175,16 @@ function statementsFor(env: Env, op: Op, now: string): D1PreparedStatement[] {
       return [env.DB.prepare(
         `INSERT INTO blocks
            (id, booking_id, date, start_min, end_min, group_ids, kind, activity_id,
-            title, delivery, staff_ids, training_staff_ids, venue_id, note, locked,
-            colour, updated_at)
-         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16, ?17)
+            title, delivery, venue_id, note, locked, colour, updated_at)
+         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15)
          ON CONFLICT(id) DO UPDATE SET
            booking_id = ?2, date = ?3, start_min = ?4, end_min = ?5, group_ids = ?6,
-           kind = ?7, activity_id = ?8, title = ?9, delivery = ?10, staff_ids = ?11,
-           training_staff_ids = ?12, venue_id = ?13, note = ?14, locked = ?15,
-           colour = ?16, updated_at = ?17`,
+           kind = ?7, activity_id = ?8, title = ?9, delivery = ?10, venue_id = ?11,
+           note = ?12, locked = ?13, colour = ?14, updated_at = ?15`,
       ).bind(
         b.id, b.bookingId, b.date, b.startMin, b.endMin,
         JSON.stringify(b.groupIds ?? []), b.kind, b.activityId ?? null, b.title ?? null,
-        b.delivery, JSON.stringify(b.staffIds ?? []),
-        b.trainingStaffIds?.length ? JSON.stringify(b.trainingStaffIds) : null,
-        b.venueId ?? null, b.note ?? null, b.locked ? 1 : 0, b.colour ?? null, now,
+        b.delivery, b.venueId ?? null, b.note ?? null, b.locked ? 1 : 0, b.colour ?? null, now,
       )]
     }
 
@@ -276,8 +272,6 @@ interface BlockRow {
   activity_id: string | null
   title: string | null
   delivery: string
-  staff_ids: string
-  training_staff_ids: string | null
   venue_id: string | null
   note: string | null
   locked: number
@@ -318,7 +312,6 @@ function toBooking(row: BookingRow): Booking {
 }
 
 function toBlock(row: BlockRow): Block {
-  const training = parseArray(row.training_staff_ids)
   return {
     id: row.id,
     bookingId: row.booking_id,
@@ -330,8 +323,6 @@ function toBlock(row: BlockRow): Block {
     activityId: row.activity_id ?? undefined,
     title: row.title ?? undefined,
     delivery: row.delivery as Block['delivery'],
-    staffIds: parseArray(row.staff_ids),
-    trainingStaffIds: training.length > 0 ? training : undefined,
     venueId: row.venue_id ?? undefined,
     note: row.note ?? undefined,
     locked: row.locked === 1 ? true : undefined,

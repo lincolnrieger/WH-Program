@@ -101,17 +101,9 @@ export function instantiateTemplate(
       groupIds: routine.wholeSchool ? allGroupIds : [allGroupIds[0]],
       kind,
       title: entry.title ?? routine.title,
-      delivery: 'staff' as const,
-      staffIds: [],
+      delivery: routine.delivery ?? 'staff',
       colour: routine.colour,
     }]
   })
 }
 
-/** Package tiers seen on the booking header lines of the holistic sheets. */
-export const PACKAGE_PRESETS = [
-  { id: 'bronze', label: 'Bronze', activitiesPerDay: 1 },
-  { id: 'silver', label: 'Silver', activitiesPerDay: 2 },
-  { id: 'gold', label: 'Gold', activitiesPerDay: 3 },
-  { id: 'ultimate', label: 'Ultimate', activitiesPerDay: 4 },
-] as const

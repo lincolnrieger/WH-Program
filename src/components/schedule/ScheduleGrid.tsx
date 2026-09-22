@@ -1,6 +1,5 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
-import type { Activity, Block, Booking, Issue } from '@/types'
-import { staffLabel } from '@/lib/exportImport'
+import type { Activity, Block, Booking } from '@/types'
 import { layoutBlocks } from '@/lib/layout'
 import { formatTimeFull } from '@/lib/time'
 import { blockPalette } from '@/lib/colour'
@@ -17,16 +16,13 @@ export interface ScheduleGridProps {
   blocks: Block[]
   activities: Map<string, Activity>
   venueNames: Map<string, string>
-  staffNames: Map<string, string>
-  issues: Issue[]
   selection: string[]
   highlightIds: string[]
   dayStartMin: number
   dayEndMin: number
   zoom: number
   dark: boolean
-  showConflicts: boolean
-  /** Show venue and staff on blocks tall enough for it. */
+  /** Show the venue on blocks tall enough for it. */
   showDetail: boolean
   onSelect: (blockId: string, additive: boolean) => void
   onBackgroundClick: () => void
@@ -42,8 +38,8 @@ export interface ScheduleGridProps {
  * dragged over it.
  */
 export function ScheduleGrid({
-  gridId, booking, date, blocks, activities, venueNames, staffNames, issues,
-  selection, highlightIds, dayStartMin, dayEndMin, zoom, dark, showConflicts, showDetail,
+  gridId, booking, date, blocks, activities, venueNames,
+  selection, highlightIds, dayStartMin, dayEndMin, zoom, dark, showDetail,
   onSelect, onBackgroundClick, onEmptyDoubleClick, compact = false,
 }: ScheduleGridProps) {
   const canvasRef = useRef<HTMLDivElement>(null)
@@ -70,19 +66,6 @@ export function ScheduleGrid({
   }, [gridId, booking.id, date, groupIds, pxPerMinute, dayStartMin, dayEndMin])
 
   const positioned = useMemo(() => layoutBlocks(blocks, groupIds), [blocks, groupIds])
-
-  const issuesByBlock = useMemo(() => {
-    const map = new Map<string, Issue[]>()
-    if (!showConflicts) return map
-    for (const issue of issues) {
-      for (const blockId of issue.blockIds) {
-        const list = map.get(blockId)
-        if (list) list.push(issue)
-        else map.set(blockId, [issue])
-      }
-    }
-    return map
-  }, [issues, showConflicts])
 
   const columns = Math.max(groupIds.length, 1)
   const columnPercent = 100 / columns
@@ -169,15 +152,7 @@ export function ScheduleGrid({
               dark={dark}
               selected={selection.includes(block.id)}
               highlighted={highlightIds.includes(block.id)}
-              issues={issuesByBlock.get(block.id) ?? []}
               venueName={showDetail && block.venueId ? venueNames.get(block.venueId) : undefined}
-              staffNames={
-                showDetail
-                  ? block.staffIds.map((id) =>
-                      staffLabel(block, id, staffNames.get(id) ?? id),
-                    )
-                  : []
-              }
               onSelect={onSelect}
             />
           )

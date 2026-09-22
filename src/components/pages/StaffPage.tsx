@@ -12,7 +12,11 @@ import { Modal } from '@/components/ui/Modal'
 type Mode = 'person' | 'matrix'
 
 /**
- * Staff training.
+ * Staff training — a reference table, not a roster.
+ *
+ * Nothing in the schedule points at a staff member: who runs a session is
+ * worked out elsewhere. This page exists so that "who can run Laser Skirmish?"
+ * has an answer in one place.
  *
  * The seed data comes from the training workbook, where competency is encoded
  * as a cell fill colour. Anything set here is stored as an override on top, so
@@ -99,7 +103,8 @@ export function StaffPage({
         <div>
           <h1 className="text-[14px] font-semibold text-[var(--ink)]">Staff training</h1>
           <p className="text-[11.5px] text-[var(--ink-soft)]">
-            {siteStaff.length} staff · {siteActivities.length} activities at this site
+            {siteStaff.length} staff · {siteActivities.length} activities at this site · who is
+            signed off for what
           </p>
         </div>
 
@@ -540,9 +545,8 @@ function StaffDialog({
         </div>
 
         <p className="rounded-md bg-[var(--surface-sunk)] px-2 py-1.5 text-[11.5px] leading-snug text-[var(--ink-soft)]">
-          Removing someone hides them from the app and takes them off any sessions
-          they were rostered on. Their training data is kept, so they can be
-          restored by re-importing the workbook.
+          Removing someone hides them from this table. Their training data is kept, so
+          they can be restored by re-importing the workbook.
         </p>
       </div>
     </Modal>
