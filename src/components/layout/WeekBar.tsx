@@ -18,20 +18,64 @@ const PICKER_FORWARD = 20
  * leads with, with the calendar dates underneath. The picker lists whole weeks
  * the same way, so jumping to the week you mean is one click rather than a
  * date-field guess.
+ *
+ * The day strip is a multi-select: click a day for that day, drag across the
+ * strip for a run of them, ctrl-click to add or drop one. Everything below
+ * shows whatever is selected here, side by side, so "Tuesday and Wednesday" or
+ * a whole week is a selection rather than a mode.
  */
 export function WeekBar({
   bookings,
   date,
+  selected,
+  stay,
   onDateChange,
+  onDatesChange,
 }: {
   bookings: Booking[]
+  /** The day the day-scoped tools act on. */
   date: string
+  /** Every day currently on screen, including the active one. */
+  selected: string[]
+  /** The open school's own days, offered as a one-click selection. */
+  stay?: { label: string; dates: string[] }
   onDateChange: (date: string) => void
+  onDatesChange: (dates: string[]) => void
 }) {
   const [picking, setPicking] = useState(false)
+  const anchorRef = useRef<string | null>(null)
 
   const weekStart = useMemo(() => startOfWeek(date), [date])
-  const days = useMemo(() => dateRange(weekStart, addDays(weekStart, 6)), [weekStart])
+  const weekDays = useMemo(() => dateRange(weekStart, addDays(weekStart, 6)), [weekStart])
+
+  // A stay can straddle a Sunday, so a selected day outside this week still
+  // gets a chip — every day on screen is visible in the strip, or turning one
+  // off means hunting for it.
+  const days = useMemo(
+    () => [...new Set([...weekDays, ...selected])].sort(),
+    [weekDays, selected],
+  )
+
+  const chosen = useMemo(() => new Set(selected), [selected])
+
+  // Dragging across the strip selects a run, the way dragging across a
+  // calendar does. Releasing anywhere ends it, including off the strip.
+  useEffect(() => {
+    const stop = () => {
+      anchorRef.current = null
+    }
+    window.addEventListener('pointerup', stop)
+    window.addEventListener('pointercancel', stop)
+    return () => {
+      window.removeEventListener('pointerup', stop)
+      window.removeEventListener('pointercancel', stop)
+    }
+  }, [])
+
+  function runBetween(a: string, b: string): string[] {
+    const [from, to] = a <= b ? [a, b] : [b, a]
+    return days.filter((day) => day >= from && day <= to)
+  }
 
   const occupancy = useMemo(() => {
     const map = new Map<string, number>()
@@ -95,21 +139,44 @@ export function WeekBar({
         </IconButton>
       </div>
 
-      <div className="flex flex-wrap gap-1">
+      <div className="flex flex-wrap items-center gap-1" role="group" aria-label="Days shown">
         {days.map((day) => {
           const count = occupancy.get(day) ?? 0
-          const active = day === date
+          const on = chosen.has(day)
+          const anchor = day === date
+          const outsideWeek = day < weekDays[0] || day > weekDays[6]
           return (
             <button
               key={day}
               type="button"
-              onClick={() => onDateChange(day)}
-              aria-current={active ? 'date' : undefined}
-              title={`${formatDate(day)} · ${termWeekOf(day).label}`}
+              aria-pressed={on}
+              aria-current={anchor ? 'date' : undefined}
+              title={
+                `${formatDate(day)} · ${termWeekOf(day).label}` +
+                '\nClick for this day · drag across for a run · ctrl-click to add or drop one'
+              }
+              onPointerDown={(event) => {
+                if (event.button !== 0) return
+                anchorRef.current = day
+                if (event.ctrlKey || event.metaKey) {
+                  // Ctrl-click drops a day unless it is the last one standing.
+                  const next = on ? selected.filter((d) => d !== day) : [...selected, day]
+                  if (next.length > 0) onDatesChange(next)
+                  return
+                }
+                onDateChange(day)
+              }}
+              onPointerEnter={() => {
+                const from = anchorRef.current
+                if (from && from !== day) onDatesChange(runBetween(from, day))
+              }}
               className={cx(
-                'relative min-w-[62px] rounded-md border px-2 py-1 text-left transition-colors',
-                active
-                  ? 'border-[var(--brand)] bg-[var(--brand)] text-[var(--brand-ink)]'
+                'relative min-w-[62px] rounded-md border px-2 py-1 text-left transition-colors select-none',
+                outsideWeek && 'border-dashed',
+                on
+                  ? anchor
+                    ? 'border-[var(--brand)] bg-[var(--brand)] text-[var(--brand-ink)]'
+                    : 'border-[var(--brand)] bg-[var(--brand-tint)] text-[var(--ink)]'
                   : count === 0
                     ? 'border-[var(--line)] bg-[var(--surface)] text-[var(--ink-faint)] hover:bg-[var(--surface-sunk)]'
                     : 'border-[var(--line)] bg-[var(--surface)] text-[var(--ink)] hover:bg-[var(--surface-sunk)]',
@@ -117,7 +184,7 @@ export function WeekBar({
             >
               <span className="flex items-baseline gap-1">
                 <span className="text-[12px] font-semibold">{weekdayShort(day)}</span>
-                <span className={cx('tnum text-[10px]', active ? 'opacity-75' : 'text-[var(--ink-faint)]')}>
+                <span className={cx('tnum text-[10px]', anchor ? 'opacity-75' : 'text-[var(--ink-faint)]')}>
                   {Number(day.slice(8))}
                 </span>
                 {day === today && (
@@ -125,7 +192,7 @@ export function WeekBar({
                     aria-label="Today"
                     className={cx(
                       'ml-auto h-1.5 w-1.5 rounded-full',
-                      active ? 'bg-[var(--brand-ink)]' : 'bg-[var(--brand)]',
+                      anchor ? 'bg-[var(--brand-ink)]' : 'bg-[var(--brand)]',
                     )}
                   />
                 )}
@@ -133,7 +200,7 @@ export function WeekBar({
               <span
                 className={cx(
                   'tnum block text-[10px]',
-                  active ? 'opacity-80' : 'text-[var(--ink-faint)]',
+                  anchor ? 'opacity-80' : 'text-[var(--ink-faint)]',
                 )}
               >
                 {count === 0 ? 'free' : `${count} school${count === 1 ? '' : 's'}`}
@@ -141,8 +208,63 @@ export function WeekBar({
             </button>
           )
         })}
+
+        <span aria-hidden className="mx-0.5 h-7 w-px bg-[var(--line)]" />
+
+        <Chip
+          label="Week"
+          title="Show all seven days side by side"
+          on={weekDays.every((day) => chosen.has(day)) && selected.length === weekDays.length}
+          onClick={() => onDatesChange(weekDays)}
+        />
+        {stay && stay.dates.length > 1 && (
+          <Chip
+            label={stay.label}
+            title="Show every day of this school's visit"
+            on={
+              stay.dates.length === selected.length &&
+              stay.dates.every((day) => chosen.has(day))
+            }
+            onClick={() => onDatesChange(stay.dates)}
+          />
+        )}
+        {selected.length > 1 && (
+          <Chip
+            label="Just one"
+            title="Back to a single day"
+            on={false}
+            onClick={() => onDateChange(date)}
+          />
+        )}
       </div>
     </div>
+  )
+}
+
+/** A small on/off button for the ready-made day selections. */
+function Chip({
+  label, title, on, onClick,
+}: {
+  label: string
+  title: string
+  on: boolean
+  onClick: () => void
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      title={title}
+      aria-pressed={on}
+      className={cx(
+        'h-[38px] rounded-md border px-2.5 text-[11.5px] font-medium transition-colors',
+        on
+          ? 'border-[var(--brand)] bg-[var(--brand-tint)] text-[var(--brand)]'
+          : 'border-[var(--line)] bg-[var(--surface)] text-[var(--ink-soft)] hover:bg-[var(--surface-sunk)]',
+      )}
+    >
+      {label}
+    </button>
   )
 }
 

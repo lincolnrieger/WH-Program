@@ -44,7 +44,17 @@ interface State {
 
   page: Page
   activeBookingId: string | null
+  /** The day the day-scoped tools act on — templates, clear, print, export. */
   activeDate: string | null
+  /**
+   * Further days shown alongside the active one, never including it.
+   *
+   * Which days are on screen is one choice made in one place — the day strip
+   * at the top — and every view below reads it, so the plan view showing a
+   * whole stay and the site view showing a whole week are the same setting
+   * rather than two modes that have to be kept in step.
+   */
+  extraDates: string[]
   selection: Selection
   /** Block ids the grid should flash, e.g. after a rotation is generated. */
   highlightIds: string[]
@@ -131,7 +141,12 @@ interface State {
   // ── ui ──
   setPage: (page: Page) => void
   setActiveBooking: (id: string | null) => void
+  /** Show this one day and nothing else. */
   setActiveDate: (date: string | null) => void
+  /** Show exactly these days, keeping the active one if it is still among them. */
+  setDates: (dates: string[]) => void
+  /** Point the day-scoped tools at this day without changing what's on screen. */
+  focusDate: (date: string) => void
   select: (blockIds: string[], additive?: boolean) => void
   clearSelection: () => void
   setHighlight: (ids: string[]) => void
@@ -198,6 +213,7 @@ export const useStore = create<State>((set, get) => {
     page: 'plan',
     activeBookingId: initialDoc.bookings[0]?.id ?? null,
     activeDate: initialDoc.bookings[0]?.startDate ?? null,
+    extraDates: [],
     selection: { blockIds: [] },
     highlightIds: [],
     search: '',
@@ -213,6 +229,7 @@ export const useStore = create<State>((set, get) => {
         future: [],
         activeBookingId: doc.bookings[0]?.id ?? null,
         activeDate: doc.bookings[0]?.startDate ?? null,
+        extraDates: [],
         selection: { blockIds: [] },
       }))
     },
@@ -262,6 +279,7 @@ export const useStore = create<State>((set, get) => {
         future: [],
         activeBookingId: null,
         activeDate: null,
+        extraDates: [],
         selection: { blockIds: [] },
       })
     },
@@ -279,6 +297,7 @@ export const useStore = create<State>((set, get) => {
         future: [],
         activeBookingId: first?.id ?? null,
         activeDate: first?.startDate ?? null,
+        extraDates: [],
       })
     },
 
@@ -343,7 +362,7 @@ export const useStore = create<State>((set, get) => {
         ...partial,
       }
       commit((doc) => ({ ...doc, bookings: [...doc.bookings, booking] }))
-      set({ activeBookingId: id, activeDate: booking.startDate, page: 'plan' })
+      set({ activeBookingId: id, extraDates: [], activeDate: booking.startDate, page: 'plan' })
       return id
     },
 
@@ -361,7 +380,7 @@ export const useStore = create<State>((set, get) => {
       }))
       if (get().activeBookingId === id) {
         const next = get().doc.bookings[0]
-        set({ activeBookingId: next?.id ?? null, activeDate: next?.startDate ?? null })
+        set({ activeBookingId: next?.id ?? null, extraDates: [], activeDate: next?.startDate ?? null })
       }
     },
 
@@ -544,6 +563,7 @@ export const useStore = create<State>((set, get) => {
       set({
         activeBookingId: first.id,
         activeDate: first.startDate,
+        extraDates: [],
         page: 'plan',
         selection: { blockIds: [] },
       })
@@ -740,17 +760,40 @@ export const useStore = create<State>((set, get) => {
         return
       }
 
-      set({ page, activeDate: current ? current.startDate : activeDate })
+      set({ page, extraDates: [], activeDate: current ? current.startDate : activeDate })
     },
     setActiveBooking: (id) => {
       const booking = get().doc.bookings.find((b) => b.id === id)
       set({
         activeBookingId: id,
         activeDate: booking ? clampDateToBooking(get().activeDate, booking) : null,
+        extraDates: [],
         selection: { blockIds: [] },
       })
     },
-    setActiveDate: (date) => set({ activeDate: date }),
+    setActiveDate: (date) => set({ activeDate: date, extraDates: [] }),
+
+    setDates: (dates) => {
+      const sorted = [...new Set(dates)].sort()
+      if (sorted.length === 0) return
+      const current = get().activeDate
+      const anchor = current && sorted.includes(current) ? current : sorted[0]
+      set({ activeDate: anchor, extraDates: sorted.filter((day) => day !== anchor) })
+    },
+
+    focusDate: (date) => {
+      const { activeDate, extraDates } = get()
+      // Pointing the tools at a day that is already on screen keeps the rest of
+      // the days there; reaching for one that isn't means you want that day.
+      if (!extraDates.includes(date)) {
+        set({ activeDate: date, extraDates: [] })
+        return
+      }
+      const rest = [...extraDates.filter((day) => day !== date), activeDate]
+        .filter((day): day is string => Boolean(day))
+        .sort()
+      set({ activeDate: date, extraDates: rest })
+    },
 
     select: (blockIds, additive) =>
       set((s) => ({
@@ -806,6 +849,16 @@ function clampDateToBooking(date: string | null, booking: Booking): string {
 }
 
 // ─── derived selectors ──────────────────────────────────────────────────────
+
+/** Every day currently on screen, in order, with the active one among them. */
+export function selectedDates(state: {
+  activeDate: string | null
+  extraDates: string[]
+}): string[] {
+  if (!state.activeDate) return []
+  return [...new Set([state.activeDate, ...state.extraDates])].sort()
+}
+
 
 export function allActivitiesMap(doc: ProgramDocument): Map<string, Activity> {
   return resolveActivityMap(doc)

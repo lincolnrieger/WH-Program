@@ -193,3 +193,24 @@ export function resolveResize(
 export function getGrid(id: string): GridGeometry | undefined {
   return grids.get(id)
 }
+
+// ─── scroller registry ──────────────────────────────────────────────────────
+
+const scrollers = new Set<HTMLElement>()
+
+/**
+ * Marks an element as one the drag controller may scroll.
+ *
+ * A week of schools is wider than any screen, so picking a session up on
+ * Friday has to be able to reach Monday while you are still holding it.
+ */
+export function registerScroller(element: HTMLElement): () => void {
+  scrollers.add(element)
+  return () => {
+    scrollers.delete(element)
+  }
+}
+
+export function eachScroller(visit: (element: HTMLElement) => void): void {
+  scrollers.forEach(visit)
+}
