@@ -37,8 +37,10 @@ then on — so the key can move on without a deploy.
 
 On screen the colour is used as a soft tint plus a saturated left rail rather
 than a solid fill, because forty saturated colours at screen density is
-unreadable. Printed sheets and the Excel export use the colour itself, since
-matching the existing workbooks is the whole point of them.
+unreadable. The Excel export uses the colour itself, since matching the existing
+workbooks is the whole point of it; the printed handout uses a soft wash of the
+same hue with a solid edge, which keeps the hue recognisable while leaving the
+text black and the page calm.
 
 ---
 

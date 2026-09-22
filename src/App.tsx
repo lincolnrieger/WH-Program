@@ -353,6 +353,7 @@ export default function App() {
             onUnpick={(id) => useStore.getState().unpickActivity(id)}
             onClearPicked={() => useStore.getState().clearPicked()}
             bookings={siteBookings}
+            date={date}
             activeBookingId={activeBookingId}
             onSelectBooking={(id) => {
               useStore.getState().setActiveBooking(id)
@@ -439,7 +440,6 @@ export default function App() {
                   useStore.getState().applyDayTemplate(templateId, booking.id, date)
                 }
                 onOpenRotation={() => setRotationOpen(true)}
-                onCopyDay={(from) => useStore.getState().copyDay(booking.id, from, date)}
                 onClearDay={() => {
                   if (confirm(`Clear everything scheduled for ${booking.schoolName} on this day?`)) {
                     useStore.getState().clearDay(booking.id, date)
@@ -515,10 +515,8 @@ export default function App() {
         bookings={printBookings}
         blocks={doc.blocks}
         activities={activities}
-        venues={venueMap}
         programName={siteName}
         options={printOptions}
-        siteName={siteName}
         date={date}
       />
 

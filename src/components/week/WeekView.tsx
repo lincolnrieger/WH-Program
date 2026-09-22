@@ -54,11 +54,25 @@ export function WeekView({
   const weekStart = useMemo(() => startOfWeek(date), [date])
   const weekDays = useMemo(() => dateRange(weekStart, addDays(weekStart, 6)), [weekStart])
 
+  const inWeek = useMemo(
+    () =>
+      bookings
+        .filter((b) => b.startDate <= weekDays[6] && b.endDate >= weekDays[0])
+        .sort(
+          (a, b) =>
+            a.startDate.localeCompare(b.startDate) || a.schoolName.localeCompare(b.schoolName),
+        ),
+    [bookings, weekDays],
+  )
+
   // "All schools" is the usual case; focusing one is how you check a single
   // stay against everything else on site without losing the week picture.
+  // A school picked in one week isn't on site in the next, so the choice
+  // falls back rather than emptying the view.
+  const focused = inWeek.some((b) => b.id === focusId) ? focusId : 'all'
   const inScope = useMemo(
-    () => (focusId === 'all' ? bookings : bookings.filter((b) => b.id === focusId)),
-    [bookings, focusId],
+    () => (focused === 'all' ? bookings : bookings.filter((b) => b.id === focused)),
+    [bookings, focused],
   )
 
   const onSite = useMemo(
@@ -112,14 +126,16 @@ export function WeekView({
           </p>
         </div>
 
+        {/* Only the week in view: the list is a way to single out one of the
+            schools on screen, not a directory of every booking in the term. */}
         <Select
-          value={focusId}
+          value={focused}
           onChange={(event) => setFocusId(event.target.value)}
           aria-label="Which schools to show"
           className="h-7 w-auto min-w-[150px] text-[12px]"
         >
-          <option value="all">All schools</option>
-          {bookings.map((booking) => (
+          <option value="all">All schools this week</option>
+          {inWeek.map((booking) => (
             <option key={booking.id} value={booking.id}>
               {booking.schoolName}
             </option>
