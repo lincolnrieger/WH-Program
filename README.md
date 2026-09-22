@@ -97,6 +97,23 @@ Printed sheets are laid out at full A4-landscape size and then scaled down until
 they fit, so "one page" is a guarantee rather than a hope. Print in **landscape**
 with **background graphics** on so the colours come through.
 
+**Import** (Program → *Import from spreadsheets*) reads the workbooks the
+program was run from before this app and turns them into bookings and sessions.
+Drop in a week's `.xlsx` files or the zipped week folder itself; both the
+holistic week sheet and the schools' own itineraries are understood, and a stay
+described by both is reconciled rather than imported twice. Nothing is written
+until you've seen the preview — every stay, its session count, and any name the
+catalogue didn't recognise — and the whole import lands as one step, so
+<kbd>Ctrl</kbd>+<kbd>Z</kbd> takes it back out.
+
+The sheets are hand-maintained, so the reader is forgiving: it repairs am/pm
+slips in the time column (an `11.30pm` between recess and lunch is half past
+eleven in the morning), follows sessions merged across groups or down the rows,
+reads a group column the heading row forgot to name, and matches "Tube Slide OR"
+and "Challenge Hill (Dry)" to the activities they extend. Anything still
+unrecognised is added to the catalogue keeping the colour it had in the
+spreadsheet, rather than being dropped.
+
 **Program menu**
 - *Export every session (.csv)* — one row per session, for anyone who wants the
   raw list rather than the laid-out sheet.
@@ -211,6 +228,8 @@ src/
     itinerary.ts           blocks → the row-per-start-time table both exports use
     xlsx.ts                a small .xlsx writer: fills, merges, widths
     excelExport.ts         the holistic and school sheets, as a workbook
+    xlsxRead.ts            the matching reader: values, fills, merges
+    importItinerary.ts     old workbooks → bookings and sessions
     exportImport.ts        CSV export and the shared title helpers
     backup.ts              whole-plan backup and restore
     api.ts                 the wire protocol: ops in, whole state out
@@ -250,10 +269,17 @@ A few decisions worth knowing about:
 - **One layout model for both exports.** `itinerary.ts` turns the free-form
   blocks back into the row-per-start-time table the sheets use, and the printed
   page and the spreadsheet both read from it — so they can't drift apart.
-- **The .xlsx writer is ours.** The sheets these replace mean nothing without
-  their fills, so "export" had to mean a real workbook rather than a CSV that
-  throws the colours away. Only the parts of the format those sheets use are
-  implemented, which is about 250 lines.
+- **The .xlsx writer and reader are ours.** The sheets these replace mean
+  nothing without their fills, so "export" had to mean a real workbook rather
+  than a CSV that throws the colours away — and "import" had to mean reading
+  those fills back, since half of what a cell means is its colour. Only the
+  parts of the format those sheets use are implemented, which is about 250
+  lines each way.
+- **The importer trusts names over colours.** Several activities share a fill,
+  so a colour alone is never enough to identify one: "Solo" printed in Nature
+  Handicraft's yellow is still not Nature Handicraft. A name that *extends* a
+  catalogue name — "Tube Slide OR" — counts as that activity when the colour
+  agrees, and everything else becomes its own.
 - **Undo snapshots the whole document.** A week of blocks is a few hundred
   objects — small enough that snapshotting is simpler and safer than diffing.
 - **The app thinks in documents; the database thinks in rows.** Keeping whole

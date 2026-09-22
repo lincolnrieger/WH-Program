@@ -189,6 +189,36 @@ Dates outside any term read as *School holidays*.
 
 ---
 
+## Importing the old workbooks
+
+The weeks the program was already running are brought in through **Program →
+Import from spreadsheets** rather than by editing code — see the README. Both
+layouts are read: the holistic week sheet, where the days run down the page and
+the schools sit side by side each with its own time column, and the individual
+handout, which is one school with a table per day.
+
+A few things the importer infers, worth knowing when a result looks surprising:
+
+- **Times** are resolved against the rest of the day, so a mistyped `11.30pm`
+  between recess and lunch comes in as 11:30am. A session ends when the next row
+  starts; the last of a day gets an hour.
+- **Dates** come from the date row on a holistic sheet, and from the header on
+  an individual one — `12-14/10/2026` and a single date both parse. A handout
+  whose header can't be read is reported rather than guessed at.
+- **The headline** `School - Year 5/6 - 90est / Ultimate - Rymill` is unpicked
+  by what each part looks like, not by where it sits, because the convention is
+  loose. The `Ulitmate` typo is understood. Anything left over becomes the
+  booking's notes.
+- **The same stay in two files** is merged: `McLaren Flat PS` on the week sheet
+  and `McLaren Flat Primary School` on its own handout are one booking, and the
+  spelled-out name wins. The handout supplies the day detail, the week sheet the
+  year level, package and building.
+- **Group columns** are taken from the days as well as the heading row, since
+  these sheets are full of stays where a second group was added to the days and
+  never to the heading.
+
+---
+
 ## What wasn't carried across
 
 - **Staff rosters** (the *Itinerary — 3 groups + Staffing* sheet), deliberately.

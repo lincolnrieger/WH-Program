@@ -19,7 +19,8 @@ const PAGES: { id: Page; label: string }[] = [
 export function TopBar({
   site, onSite, page, onPage, prefs, onPrefs,
   canUndo, canRedo, onUndo, onRedo,
-  onExportCsv, onBackup, onRestore, onPrint, onStartFresh, onLoadSample, sync, onRetrySync,
+  onExportCsv, onBackup, onRestore, onImport, onPrint, onStartFresh, onLoadSample,
+  sync, onRetrySync,
 }: {
   site: Site
   onSite: (site: Site) => void
@@ -34,6 +35,7 @@ export function TopBar({
   onExportCsv: () => void
   onBackup: () => void
   onRestore: () => void
+  onImport: () => void
   onPrint: () => void
   onStartFresh: () => void
   onLoadSample: () => void
@@ -140,6 +142,9 @@ export function TopBar({
             <>
               <div className="fixed inset-0 z-40" onClick={() => setMenuOpen(false)} aria-hidden />
               <div className="absolute right-0 z-50 mt-1 w-[280px] overflow-hidden rounded-lg border border-[var(--line)] bg-[var(--surface)] py-1 shadow-[var(--shadow-lg)]">
+                <MenuItem onClick={() => { setMenuOpen(false); onImport() }}>
+                  Import from spreadsheets…
+                </MenuItem>
                 <MenuItem onClick={() => { setMenuOpen(false); onExportCsv() }}>
                   Export every session (.csv)
                 </MenuItem>
