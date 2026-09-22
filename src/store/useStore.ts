@@ -98,7 +98,6 @@ interface State {
     /** Clear whatever activities are already on those days first. */
     replaceExisting?: boolean
   }) => void
-  copyDay: (bookingId: string, fromDate: string, toDate: string) => void
   clearDay: (bookingId: string, date: string) => void
   /** Adds whole stays read out of the old spreadsheets, alongside what's there. */
   importStays: (input: {
@@ -514,21 +513,6 @@ export const useStore = create<State>((set, get) => {
         ],
       }))
       set({ highlightIds: created.map((b) => b.id), selection: { blockIds: [] } })
-    },
-
-    copyDay: (bookingId, fromDate, toDate) => {
-      const { doc } = get()
-      const source = doc.blocks.filter((b) => b.bookingId === bookingId && b.date === fromDate)
-      if (source.length === 0) return
-      const copies = source.map((b) => ({ ...b, id: uid('blk'), date: toDate }))
-      commit((d) => ({
-        ...d,
-        blocks: [
-          ...d.blocks.filter((b) => !(b.bookingId === bookingId && b.date === toDate)),
-          ...copies,
-        ],
-      }))
-      set({ highlightIds: copies.map((c) => c.id) })
     },
 
     clearDay: (bookingId, date) =>

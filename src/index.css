@@ -196,23 +196,41 @@ body.is-dragging * {
   z-index: -1;
 }
 
-/* One A4 landscape page at 96dpi, less a 10mm margin all round. */
+/*
+ * Two shapes of sheet. The holistic sheet has to land on exactly one landscape
+ * page, so it is a fixed box that its contents are scaled into. A school
+ * handout is meant to be read rather than crammed, so it is a portrait column
+ * that grows and breaks between days.
+ */
 .print-sheet {
-  width: 1047px;
-  height: 718px;
-  overflow: hidden;
   background: #ffffff;
-  color: #000000;
+  color: #111111;
+  font-feature-settings: 'tnum' 0;
+}
+
+.print-sheet--fixed {
+  overflow: hidden;
 }
 
 .print-sheet + .print-sheet {
   break-before: page;
 }
 
+/*
+ * The page itself is sized from script — see `printPageSize` in PrintView —
+ * because the orientation depends on what is being printed and `@page` can't
+ * be conditioned on a class. This is only the fallback for a print that
+ * somehow starts before that rule is in place.
+ */
+@page {
+  size: A4 landscape;
+  margin: 10mm;
+}
+
 @media print {
-  @page {
-    size: A4 landscape;
-    margin: 10mm;
+  /* On paper the sheet is the page: let it use the full printable width. */
+  .print-sheet--flow {
+    width: 100% !important;
   }
 
   body {
@@ -246,6 +264,11 @@ body.is-dragging * {
   /* Even column widths, so a printed day reads like the spreadsheet it replaces. */
   .print-only table {
     table-layout: fixed;
+  }
+
+  /* A day should not be split across a page turn if it can be helped. */
+  .print-only thead {
+    display: table-header-group;
   }
 
   .no-print {

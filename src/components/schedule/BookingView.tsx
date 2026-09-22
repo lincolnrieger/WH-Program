@@ -2,7 +2,7 @@ import { useMemo, useState } from 'react'
 import type { Activity, Block, Booking } from '@/types'
 import { DAY_TEMPLATES } from '@/data/templates'
 import { bookingDates, bookingHeadline, bookingSubhead } from '@/lib/exportImport'
-import { formatDate, weekdayShort } from '@/lib/time'
+import { weekdayShort } from '@/lib/time'
 import { ScheduleGrid } from './ScheduleGrid'
 import { TimeAxis } from './TimeAxis'
 import { Button, cx } from '@/components/ui/primitives'
@@ -14,7 +14,7 @@ export function BookingView({
   booking, date, blocks, activities, venueNames,
   selection, highlightIds, dayStartMin, dayEndMin, zoom, dark, showDetail,
   onSelect, onClearSelection, onDateChange, onApplyTemplate, onOpenRotation,
-  onCopyDay, onClearDay, onEditBooking, onEmptyDoubleClick,
+  onClearDay, onEditBooking, onEmptyDoubleClick,
 }: {
   booking: Booking
   date: string
@@ -33,13 +33,11 @@ export function BookingView({
   onDateChange: (date: string) => void
   onApplyTemplate: (templateId: string) => void
   onOpenRotation: () => void
-  onCopyDay: (fromDate: string) => void
   onClearDay: () => void
   onEditBooking: () => void
   onEmptyDoubleClick: (groupIndex: number, startMin: number) => void
 }) {
   const [templateOpen, setTemplateOpen] = useState(false)
-  const [copyOpen, setCopyOpen] = useState(false)
 
   const dates = useMemo(() => bookingDates(booking), [booking])
   const dayBlocks = useMemo(
@@ -96,36 +94,6 @@ export function BookingView({
             <Button size="sm" variant="primary" onClick={onOpenRotation}>
               Add activities
             </Button>
-
-            <div className="relative">
-              <Button size="sm" onClick={() => setCopyOpen((open) => !open)}>
-                Copy day &#9662;
-              </Button>
-              {copyOpen && (
-                <Dropdown onClose={() => setCopyOpen(false)}>
-                  {dates.filter((d) => d !== date).length === 0 && (
-                    <p className="px-3 py-2 text-[11.5px] text-[var(--ink-faint)]">
-                      This booking only has one day.
-                    </p>
-                  )}
-                  {dates
-                    .filter((d) => d !== date)
-                    .map((source) => (
-                      <button
-                        key={source}
-                        type="button"
-                        onClick={() => {
-                          onCopyDay(source)
-                          setCopyOpen(false)
-                        }}
-                        className="block w-full px-3 py-1.5 text-left text-[12.5px] transition-colors hover:bg-[var(--surface-sunk)]"
-                      >
-                        Copy {formatDate(source)} here
-                      </button>
-                    ))}
-                </Dropdown>
-              )}
-            </div>
 
             <Button size="sm" variant="ghost" onClick={onClearDay}>
               Clear day

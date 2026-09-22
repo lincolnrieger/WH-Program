@@ -36,23 +36,23 @@ around, nothing to remember to save.
 **Faster than a spreadsheet**
 - **Day templates** — Arrival day, Full day, Departure day, Day visit. Lays down
   the meals and logistics at the standard times so only activities are left.
-- **Add activities** — pick the activities for a school, then choose how they
-  land:
-  - **Sort automatically** builds the rotation for you: every group does every
-    activity once and no two groups collide. Cover one day or the whole stay in
-    one go — across days the rotation keeps counting rather than restarting, so
-    Tuesday picks up where Monday left off.
-  - **Add to list** doesn't arrange anything. The activities go to the top of
-    the palette under **Picked**, and you drag them where you want them. This is
-    the one to use when the shape of the week is already in your head.
+- **Add activities** — two questions. *Pick the activities*, then *choose how
+  they go in*:
+  - **I'll place them** puts them at the top of the palette under **Picked** and
+    leaves them alone; you drag each one where you want it. Most of the time
+    this is the one you want.
+  - **Fill the timetable** lays them out as a rotation instead: every group does
+    every activity once, no two groups collide, and across days it keeps
+    counting rather than restarting, so Tuesday picks up where Monday left off.
 - **Add a custom activity** — the box at the top of the palette takes a name and
   makes an activity there and then, ready to drag. It's a real catalogue entry,
   so its colour and length are editable on the Activities page afterwards.
-- **Copy day** — duplicate one day of a booking onto another.
 - Undo/redo across everything (<kbd>Ctrl</kbd>+<kbd>Z</kbd>).
 
 **Five sections**
 - **Plan** — one school, one day, a column per group. The main editing surface.
+  The **Schools** list beside it is the week you're looking at, not the whole
+  term; search it to reach any school in any week.
 - **Whole site** — the holistic picture, as a **day** or a whole **week**, for
   every school or just one. Day mode is the same grid as the planning view, one
   block of columns per school, with sessions draggable straight from one school
@@ -71,31 +71,34 @@ in `src/lib/term.ts` — see [DATA.md](DATA.md#school-terms).
 
 ## Getting work out
 
-**Print / export** (<kbd>Ctrl</kbd>+<kbd>P</kbd>) offers four sheets, and each
-one can go to the printer or come out as a **spreadsheet** with the colours
-intact.
+**Print / export** (<kbd>Ctrl</kbd>+<kbd>P</kbd>) asks one question — what do
+you want — and then prints it or saves it as a spreadsheet.
 
-| Sheet | What's on it |
+| Choice | What you get |
 | --- | --- |
-| One school, whole stay | The school handout: a table per day, a column per group |
+| One school, whole stay | The handout you give the school: every day, a column per group |
 | One school, one day | Just that day of the visit |
-| Holistic — one day | Every school on site that day, side by side |
-| Holistic — one week | A band per day, schools side by side, on one page |
+| Everyone on site, one day | Every school here that day, side by side |
+| Everyone on site, one week | The whole week, a band per day |
 
-Both layouts follow the workbooks they replace. The school itinerary leads with
-the school, the dates and the note that **TL = Teacher Led**, then a table per
-day. The holistic sheet stacks the days down the page and sets the schools
-across it, each keeping its own time column — because a day visit arriving at
-9.45 and a camp starting at 7.30 don't share a clock, and forcing them onto one
-leaves the page full of holes.
+**On paper**, the school handout is A4 portrait with the days down the page. It
+is set to be read — on a bus, on a hill, through a photocopier — so the type is
+a comfortable size, the rules are hairlines, and the days break cleanly onto a
+second page rather than being shrunk to fit. Activities carry their colour as a
+soft wash with a solid edge in the same hue: the colour language staff already
+know, without a page that fights you. Meals and logistics get no fill at all,
+which is what keeps the page from turning into a patchwork.
 
-Activity cells carry the colour from the colour key. Meals and logistics print
-unfilled, which is how they read on the existing sheets. The Excel file gets the
-colour key as its own tab.
+The holistic sheet is the exception, because its job is to show everybody at
+once. It stays landscape, sets the schools side by side in even columns with
+each keeping its own time column — a day visit arriving at 9.45 and a camp
+starting at 7.30 don't share a clock — and is scaled to land on exactly one
+page. Turn on **Background graphics** in the print dialog so the colours come
+through.
 
-Printed sheets are laid out at full A4-landscape size and then scaled down until
-they fit, so "one page" is a guarantee rather than a hope. Print in **landscape**
-with **background graphics** on so the colours come through.
+**As a spreadsheet**, both come out as a real `.xlsx` laid out like the
+workbooks they replace, with the exact fills from the colour key and the key
+itself on its own tab.
 
 **Import** (Program → *Import from spreadsheets*) reads the workbooks the
 program was run from before this app and turns them into bookings and sessions.

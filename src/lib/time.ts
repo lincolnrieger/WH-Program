@@ -135,6 +135,38 @@ export function formatDate(iso: string): string {
   return `${WEEKDAYS[date.getDay()]} ${date.getDate()} ${MONTHS[date.getMonth()]}`
 }
 
+const WEEKDAYS_LONG = [
+  'Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday',
+]
+const MONTHS_LONG = [
+  'January', 'February', 'March', 'April', 'May', 'June',
+  'July', 'August', 'September', 'October', 'November', 'December',
+]
+
+/** "Monday 21 September" — how a date reads on a handout. */
+export function formatDateLong(iso: string): string {
+  const date = fromISODate(iso)
+  return `${WEEKDAYS_LONG[date.getDay()]} ${date.getDate()} ${MONTHS_LONG[date.getMonth()]}`
+}
+
+/**
+ * "Monday 21 – Wednesday 23 September 2026", dropping whatever the two ends
+ * share so the line stays short.
+ */
+export function formatDateRangeLong(startIso: string, endIso: string): string {
+  const start = fromISODate(startIso)
+  const end = fromISODate(endIso)
+  const year = end.getFullYear()
+
+  if (startIso === endIso) return `${formatDateLong(startIso)} ${year}`
+
+  const sameMonth = start.getMonth() === end.getMonth() && start.getFullYear() === year
+  const from = sameMonth
+    ? `${WEEKDAYS_LONG[start.getDay()]} ${start.getDate()}`
+    : `${WEEKDAYS_LONG[start.getDay()]} ${start.getDate()} ${MONTHS_LONG[start.getMonth()]}`
+  return `${from} – ${formatDateLong(endIso)} ${year}`
+}
+
 /** "21/09/2026" — Australian order, for print headers. */
 export function formatDateNumeric(iso: string): string {
   const date = fromISODate(iso)
