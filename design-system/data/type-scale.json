@@ -1,0 +1,58 @@
+[
+ {
+  "token": "text-2xs",
+  "px": 10,
+  "role": "Dense grid labels, badges",
+  "replaces": "7px, 9px, 9.5px, 10px",
+  "uses": 32
+ },
+ {
+  "token": "text-xs",
+  "px": 11,
+  "role": "Field labels, section titles, chips",
+  "replaces": "10.5px, 11px",
+  "uses": 64
+ },
+ {
+  "token": "text-sm",
+  "px": 12,
+  "role": "Secondary UI text, small buttons",
+  "replaces": "11.5px, 12px",
+  "uses": 61
+ },
+ {
+  "token": "text-md",
+  "px": 13,
+  "role": "Default control and body text",
+  "replaces": "12.5px, 13px",
+  "uses": 35
+ },
+ {
+  "token": "text-base",
+  "px": 14,
+  "role": "Page body (body default)",
+  "replaces": "14px",
+  "uses": 7
+ },
+ {
+  "token": "text-lg",
+  "px": 16,
+  "role": "Empty-state titles, dialog titles",
+  "replaces": "15px",
+  "uses": 2
+ },
+ {
+  "token": "text-xl",
+  "px": 20,
+  "role": "Print headings",
+  "replaces": "19px",
+  "uses": 1
+ },
+ {
+  "token": "text-2xl",
+  "px": 24,
+  "role": "Print sheet title",
+  "replaces": "22px",
+  "uses": 1
+ }
+]

@@ -1,0 +1,22 @@
+[
+ {
+  "weight": "normal",
+  "value": 400,
+  "uses": 4
+ },
+ {
+  "weight": "medium",
+  "value": 500,
+  "uses": 44
+ },
+ {
+  "weight": "semibold",
+  "value": 600,
+  "uses": 38
+ },
+ {
+  "weight": "bold",
+  "value": 700,
+  "uses": 12
+ }
+]

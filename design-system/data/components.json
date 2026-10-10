@@ -1,0 +1,47 @@
+[
+ {
+  "component": "Button",
+  "file": "src/components/ui/primitives.tsx",
+  "uses": 49
+ },
+ {
+  "component": "IconButton",
+  "file": "src/components/ui/primitives.tsx",
+  "uses": 9
+ },
+ {
+  "component": "Input",
+  "file": "src/components/ui/primitives.tsx",
+  "uses": 28
+ },
+ {
+  "component": "Select",
+  "file": "src/components/ui/primitives.tsx",
+  "uses": 7
+ },
+ {
+  "component": "Field",
+  "file": "src/components/ui/primitives.tsx",
+  "uses": 29
+ },
+ {
+  "component": "SectionTitle",
+  "file": "src/components/ui/primitives.tsx",
+  "uses": 3
+ },
+ {
+  "component": "Chip",
+  "file": "src/components/ui/primitives.tsx",
+  "uses": 5
+ },
+ {
+  "component": "EmptyState",
+  "file": "src/components/ui/primitives.tsx",
+  "uses": 5
+ },
+ {
+  "component": "Modal",
+  "file": "src/components/ui/Modal.tsx",
+  "uses": 7
+ }
+]

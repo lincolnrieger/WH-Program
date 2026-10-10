@@ -1,0 +1,29 @@
+[
+ {
+  "token": "--shadow-sm",
+  "group": "Elevation",
+  "role": "Cards, chips",
+  "light": "0 1px 2px rgb(20 36 28 / 0.06), 0 1px 3px rgb(20 36 28 / 0.04)",
+  "dark": "0 1px 2px rgb(0 0 0 / 0.4)",
+  "uses": 5,
+  "new_light": "0 1px 2px rgb(20 36 28 / 0.06), 0 1px 3px rgb(20 36 28 / 0.04)"
+ },
+ {
+  "token": "--shadow-md",
+  "group": "Elevation",
+  "role": "Menus",
+  "light": "0 2px 6px rgb(20 36 28 / 0.08), 0 8px 20px rgb(20 36 28 / 0.07)",
+  "dark": "0 2px 8px rgb(0 0 0 / 0.45)",
+  "uses": 1,
+  "new_light": "0 2px 6px rgb(20 36 28 / 0.08), 0 8px 20px rgb(20 36 28 / 0.07)"
+ },
+ {
+  "token": "--shadow-lg",
+  "group": "Elevation",
+  "role": "Dialogs, drag ghost",
+  "light": "0 8px 24px rgb(20 36 28 / 0.14), 0 24px 60px rgb(20 36 28 / 0.12)",
+  "dark": "0 10px 30px rgb(0 0 0 / 0.55)",
+  "uses": 7,
+  "new_light": "0 8px 24px rgb(20 36 28 / 0.14), 0 24px 60px rgb(20 36 28 / 0.12)"
+ }
+]

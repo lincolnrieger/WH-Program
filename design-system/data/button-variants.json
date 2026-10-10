@@ -1,0 +1,18 @@
+[
+ {
+  "variant": "primary",
+  "uses": 18
+ },
+ {
+  "variant": "default",
+  "uses": 21
+ },
+ {
+  "variant": "ghost",
+  "uses": 5
+ },
+ {
+  "variant": "danger",
+  "uses": 5
+ }
+]

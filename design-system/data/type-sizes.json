@@ -1,0 +1,86 @@
+[
+ {
+  "size": "7px",
+  "px": 7.0,
+  "uses": 1,
+  "new_step": "text-2xs"
+ },
+ {
+  "size": "9px",
+  "px": 9.0,
+  "uses": 12,
+  "new_step": "text-2xs"
+ },
+ {
+  "size": "9.5px",
+  "px": 9.5,
+  "uses": 2,
+  "new_step": "text-2xs"
+ },
+ {
+  "size": "10px",
+  "px": 10.0,
+  "uses": 17,
+  "new_step": "text-2xs"
+ },
+ {
+  "size": "10.5px",
+  "px": 10.5,
+  "uses": 27,
+  "new_step": "text-xs"
+ },
+ {
+  "size": "11px",
+  "px": 11.0,
+  "uses": 37,
+  "new_step": "text-xs"
+ },
+ {
+  "size": "11.5px",
+  "px": 11.5,
+  "uses": 34,
+  "new_step": "text-sm"
+ },
+ {
+  "size": "12px",
+  "px": 12.0,
+  "uses": 27,
+  "new_step": "text-sm"
+ },
+ {
+  "size": "12.5px",
+  "px": 12.5,
+  "uses": 19,
+  "new_step": "text-md"
+ },
+ {
+  "size": "13px",
+  "px": 13.0,
+  "uses": 16,
+  "new_step": "text-md"
+ },
+ {
+  "size": "14px",
+  "px": 14.0,
+  "uses": 7,
+  "new_step": "text-base"
+ },
+ {
+  "size": "15px",
+  "px": 15.0,
+  "uses": 2,
+  "new_step": "text-lg"
+ },
+ {
+  "size": "19px",
+  "px": 19.0,
+  "uses": 1,
+  "new_step": "text-xl"
+ },
+ {
+  "size": "22px",
+  "px": 22.0,
+  "uses": 1,
+  "new_step": "text-2xl"
+ }
+]

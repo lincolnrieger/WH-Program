@@ -1,0 +1,212 @@
+[
+ {
+  "token": "--ink",
+  "group": "Text",
+  "role": "Primary text",
+  "light": "#14241c",
+  "dark": "#eef3ef",
+  "uses": 55,
+  "new_light": "#14241c",
+  "contrast_light": 16.17,
+  "contrast_dark": 14.69,
+  "new_contrast_light": 16.17
+ },
+ {
+  "token": "--ink-soft",
+  "group": "Text",
+  "role": "Secondary text, ghost buttons",
+  "light": "#4a5b52",
+  "dark": "#a9b8b0",
+  "uses": 53,
+  "new_light": "#4a5b52",
+  "contrast_light": 7.22,
+  "contrast_dark": 7.99,
+  "new_contrast_light": 7.22
+ },
+ {
+  "token": "--ink-faint",
+  "group": "Text",
+  "role": "Labels, placeholders, hints",
+  "light": "#7b8a82",
+  "dark": "#7c8b83",
+  "uses": 79,
+  "new_light": "#66756d",
+  "contrast_light": 3.62,
+  "contrast_dark": 4.62,
+  "new_contrast_light": 4.85
+ },
+ {
+  "token": "--canvas",
+  "group": "Surface",
+  "role": "Page background",
+  "light": "#f6f5f1",
+  "dark": "#101713",
+  "uses": 1,
+  "new_light": "#f6f5f1"
+ },
+ {
+  "token": "--surface",
+  "group": "Surface",
+  "role": "Cards, inputs, panels",
+  "light": "#ffffff",
+  "dark": "#18211c",
+  "uses": 43,
+  "new_light": "#ffffff"
+ },
+ {
+  "token": "--surface-sunk",
+  "group": "Surface",
+  "role": "Hover fills, wells, sidebars",
+  "light": "#eeede8",
+  "dark": "#131a16",
+  "uses": 47,
+  "new_light": "#eeede8"
+ },
+ {
+  "token": "--surface-raised",
+  "group": "Surface",
+  "role": "Modals, popovers",
+  "light": "#ffffff",
+  "dark": "#1e2822",
+  "uses": 0,
+  "new_light": "#ffffff"
+ },
+ {
+  "token": "--line",
+  "group": "Border",
+  "role": "Default borders and dividers",
+  "light": "#dcdbd4",
+  "dark": "#2a352e",
+  "uses": 86,
+  "new_light": "#dcdbd4"
+ },
+ {
+  "token": "--line-strong",
+  "group": "Border",
+  "role": "Emphasised borders, scrollbars",
+  "light": "#c6c5bc",
+  "dark": "#3a473f",
+  "uses": 7,
+  "new_light": "#c6c5bc"
+ },
+ {
+  "token": "--brand",
+  "group": "Brand",
+  "role": "Primary actions, active state",
+  "light": "#1f4733",
+  "dark": "#6fae8a",
+  "uses": 46,
+  "new_light": "#1f4733",
+  "contrast_light": 10.46,
+  "contrast_dark": 6.36,
+  "new_contrast_light": 10.46
+ },
+ {
+  "token": "--brand-soft",
+  "group": "Brand",
+  "role": "Focus ring, focused borders",
+  "light": "#2d6549",
+  "dark": "#8ac2a2",
+  "uses": 8,
+  "new_light": "#2d6549",
+  "contrast_light": 6.84,
+  "contrast_dark": 8.11,
+  "new_contrast_light": 6.84
+ },
+ {
+  "token": "--brand-tint",
+  "group": "Brand",
+  "role": "Selected / active fill",
+  "light": "#e5efe8",
+  "dark": "#1c2c24",
+  "uses": 12,
+  "new_light": "#e5efe8"
+ },
+ {
+  "token": "--brand-ink",
+  "group": "Brand",
+  "role": "Text on brand fills",
+  "light": "#ffffff",
+  "dark": "#0d1611",
+  "uses": 10,
+  "new_light": "#ffffff",
+  "contrast_light": 10.46,
+  "contrast_dark": 7.1,
+  "new_contrast_light": 10.46
+ },
+ {
+  "token": "--accent",
+  "group": "Brand",
+  "role": "Highlights (terracotta)",
+  "light": "#b4622a",
+  "dark": "#e08b4e",
+  "uses": 0,
+  "new_light": "#a8571f",
+  "contrast_light": 4.45,
+  "contrast_dark": 6.26,
+  "new_contrast_light": 5.19
+ },
+ {
+  "token": "--danger",
+  "group": "Status",
+  "role": "Destructive text",
+  "light": "#b3261e",
+  "dark": "#ff8a80",
+  "uses": 8,
+  "new_light": "#b3261e",
+  "contrast_light": 6.54,
+  "contrast_dark": 7.23,
+  "new_contrast_light": 6.54
+ },
+ {
+  "token": "--danger-tint",
+  "group": "Status",
+  "role": "Destructive fill",
+  "light": "#fdeceb",
+  "dark": "#2c1917",
+  "uses": 3,
+  "new_light": "#fdeceb"
+ },
+ {
+  "token": "--warn",
+  "group": "Status",
+  "role": "Warning text",
+  "light": "#9a6700",
+  "dark": "#e8c26a",
+  "uses": 5,
+  "new_light": "#9a6700",
+  "contrast_light": 4.87,
+  "contrast_dark": 9.71,
+  "new_contrast_light": 4.87
+ },
+ {
+  "token": "--warn-tint",
+  "group": "Status",
+  "role": "Warning fill",
+  "light": "#fdf5e2",
+  "dark": "#2a2416",
+  "uses": 1,
+  "new_light": "#fdf5e2"
+ },
+ {
+  "token": "--info",
+  "group": "Status",
+  "role": "Informational text",
+  "light": "#1f5f8b",
+  "dark": "#8ec6ee",
+  "uses": 0,
+  "new_light": "#1f5f8b",
+  "contrast_light": 6.84,
+  "contrast_dark": 9.0,
+  "new_contrast_light": 6.84
+ },
+ {
+  "token": "--info-tint",
+  "group": "Status",
+  "role": "Informational fill",
+  "light": "#eaf2f8",
+  "dark": "#16242e",
+  "uses": 0,
+  "new_light": "#eaf2f8"
+ }
+]
