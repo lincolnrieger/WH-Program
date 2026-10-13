@@ -508,7 +508,7 @@ function StaffDialog({
     >
       <div className="space-y-3">
         <label className="block">
-          <span className="mb-1 block text-[11px] font-medium tracking-wide text-[var(--ink-faint)] uppercase">
+          <span className="mb-1 block text-[11px] font-medium text-[var(--ink-soft)]">
             Name
           </span>
           <Input
@@ -519,7 +519,7 @@ function StaffDialog({
         </label>
 
         <div>
-          <span className="mb-1 block text-[11px] font-medium tracking-wide text-[var(--ink-faint)] uppercase">
+          <span className="mb-1 block text-[11px] font-medium text-[var(--ink-soft)]">
             Works at
           </span>
           <div className="flex gap-3">

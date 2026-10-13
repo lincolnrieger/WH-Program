@@ -1,7 +1,7 @@
-import { useEffect, type ReactNode } from 'react'
+import { useEffect, useRef, type ReactNode } from 'react'
 import { IconButton } from './primitives'
 
-/** Centred dialog with a scrim, Escape to close and focus trapped to the panel. */
+/** Centred dialog with a scrim, Escape to close, and focus moved into the panel. */
 export function Modal({
   title,
   description,
@@ -17,13 +17,30 @@ export function Modal({
   onClose: () => void
   width?: number
 }) {
+  // The listener is added once and reads the latest onClose through a ref.
+  // Re-adding it whenever the parent re-rendered meant an Escape that also
+  // cleared the grid selection swapped the listener out mid-keypress, and the
+  // dialog stayed open.
+  const closeRef = useRef(onClose)
+  closeRef.current = onClose
+  const panelRef = useRef<HTMLDivElement>(null)
+
   useEffect(() => {
     function onKey(event: KeyboardEvent) {
-      if (event.key === 'Escape') onClose()
+      if (event.key === 'Escape') closeRef.current()
     }
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
-  }, [onClose])
+  }, [])
+
+  // Start keyboard users inside the dialog: on its first field if it has one,
+  // otherwise on the panel itself.
+  useEffect(() => {
+    const panel = panelRef.current
+    if (!panel) return
+    const field = panel.querySelector<HTMLElement>('[data-autofocus], input:not([type=hidden]):not([type=checkbox]):not([type=radio]), textarea')
+    ;(field ?? panel).focus()
+  }, [])
 
   return (
     <div
@@ -33,10 +50,12 @@ export function Modal({
       }}
     >
       <div
+        ref={panelRef}
         role="dialog"
         aria-modal="true"
         aria-label={title}
-        className="flex max-h-full w-full flex-col overflow-hidden rounded-xl border border-[var(--line)] bg-[var(--surface)] shadow-[var(--shadow-lg)]"
+        tabIndex={-1}
+        className="flex outline-none max-h-full w-full flex-col overflow-hidden rounded-xl border border-[var(--line)] bg-[var(--surface)] shadow-[var(--shadow-lg)]"
         style={{ maxWidth: width }}
       >
         <header className="flex items-start justify-between gap-3 border-b border-[var(--line)] px-4 py-3">

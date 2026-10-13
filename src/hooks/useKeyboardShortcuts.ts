@@ -1,11 +1,19 @@
-import { useEffect } from 'react'
+import { useEffect, useRef } from 'react'
 import { useStore } from '@/store/useStore'
 
 /**
  * Global shortcuts. Arrow keys nudge the selection on the time axis, which is
  * the accessible route to everything the drag gestures do.
  */
-export function useKeyboardShortcuts(options: { onPrint: () => void }): void {
+export function useKeyboardShortcuts(options: {
+  onPrint: () => void
+  /** Deletes the selection; the app owns it so it can offer an undo. */
+  onDelete: (ids: string[]) => void
+}): void {
+  // Read through a ref so the listener is added once, not on every render.
+  const optionsRef = useRef(options)
+  optionsRef.current = options
+
   useEffect(() => {
     function handler(event: KeyboardEvent) {
       const target = event.target as HTMLElement | null
@@ -29,7 +37,7 @@ export function useKeyboardShortcuts(options: { onPrint: () => void }): void {
 
       if (mod && event.key.toLowerCase() === 'p') {
         event.preventDefault()
-        options.onPrint()
+        optionsRef.current.onPrint()
         return
       }
 
@@ -41,7 +49,7 @@ export function useKeyboardShortcuts(options: { onPrint: () => void }): void {
 
       if ((event.key === 'Delete' || event.key === 'Backspace') && selected.length > 0) {
         event.preventDefault()
-        store.removeBlocks(selected)
+        optionsRef.current.onDelete(selected)
         return
       }
 
@@ -54,42 +62,34 @@ export function useKeyboardShortcuts(options: { onPrint: () => void }): void {
 
       const step = event.shiftKey ? 60 : store.prefs.snapMinutes
 
-      // Alt + arrows resize the end; plain arrows move the whole block.
+      // Alt + arrows resize the end; plain arrows move the whole block. Every
+      // selected block moves in one step, so one Ctrl+Z puts them all back.
       if (event.key === 'ArrowUp' || event.key === 'ArrowDown') {
         event.preventDefault()
         const delta = event.key === 'ArrowUp' ? -step : step
-        for (const id of selected) {
-          const block = store.doc.blocks.find((b) => b.id === id)
-          if (!block || block.locked) continue
-          if (event.altKey) {
-            const endMin = Math.max(block.startMin + 15, block.endMin + delta)
-            store.updateBlock(id, { endMin })
-          } else {
-            store.updateBlock(id, {
-              startMin: block.startMin + delta,
-              endMin: block.endMin + delta,
-            })
-          }
-        }
+        store.updateEach(selected, (block) => {
+          if (block.locked) return null
+          if (event.altKey) return { endMin: Math.max(block.startMin + 15, block.endMin + delta) }
+          return { startMin: block.startMin + delta, endMin: block.endMin + delta }
+        })
       }
 
       // Left/right move a block between group columns.
       if (event.key === 'ArrowLeft' || event.key === 'ArrowRight') {
         event.preventDefault()
         const direction = event.key === 'ArrowLeft' ? -1 : 1
-        for (const id of selected) {
-          const block = store.doc.blocks.find((b) => b.id === id)
-          if (!block || block.locked || block.groupIds.length !== 1) continue
+        store.updateEach(selected, (block) => {
+          if (block.locked || block.groupIds.length !== 1) return null
           const booking = store.doc.bookings.find((b) => b.id === block.bookingId)
-          if (!booking) continue
+          if (!booking) return null
           const index = booking.groups.findIndex((g) => g.id === block.groupIds[0])
           const next = booking.groups[index + direction]
-          if (next) store.updateBlock(id, { groupIds: [next.id] })
-        }
+          return next ? { groupIds: [next.id] } : null
+        })
       }
     }
 
     window.addEventListener('keydown', handler)
     return () => window.removeEventListener('keydown', handler)
-  }, [options])
+  }, [])
 }

@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import type { Booking } from '@/types'
 import {
-  addDays, dateRange, formatDate, startOfWeek, toISODate, weekdayShort,
+  addDays, dateRange, daysBetween, formatDate, startOfWeek, toISODate, weekdayShort,
 } from '@/lib/time'
 import { termWeekOf, termWeekOfWeek } from '@/lib/term'
 import { Button, IconButton, Input, cx } from '@/components/ui/primitives'
@@ -22,10 +22,16 @@ const PICKER_FORWARD = 20
 export function WeekBar({
   bookings,
   date,
+  stay,
   onDateChange,
 }: {
   bookings: Booking[]
   date: string
+  /**
+   * The school open on the plan page. Its days are marked "Day 1", "Day 2"…
+   * so this one row does the job of both a calendar and the stay's day list.
+   */
+  stay?: Booking
   onDateChange: (date: string) => void
 }) {
   const [picking, setPicking] = useState(false)
@@ -99,6 +105,9 @@ export function WeekBar({
         {days.map((day) => {
           const count = occupancy.get(day) ?? 0
           const active = day === date
+          const stayDay = stay && day >= stay.startDate && day <= stay.endDate
+            ? daysBetween(stay.startDate, day) + 1
+            : null
           return (
             <button
               key={day}
@@ -110,7 +119,9 @@ export function WeekBar({
                 'relative min-w-[62px] rounded-md border px-2 py-1 text-left transition-colors',
                 active
                   ? 'border-[var(--brand)] bg-[var(--brand)] text-[var(--brand-ink)]'
-                  : count === 0
+                  : stayDay
+                    ? 'border-[var(--brand-soft)] bg-[var(--brand-tint)] text-[var(--ink)] hover:brightness-[0.97]'
+                    : count === 0
                     ? 'border-[var(--line)] bg-[var(--surface)] text-[var(--ink-faint)] hover:bg-[var(--surface-sunk)]'
                     : 'border-[var(--line)] bg-[var(--surface)] text-[var(--ink)] hover:bg-[var(--surface-sunk)]',
               )}
@@ -136,7 +147,11 @@ export function WeekBar({
                   active ? 'opacity-80' : 'text-[var(--ink-faint)]',
                 )}
               >
-                {count === 0 ? 'free' : `${count} school${count === 1 ? '' : 's'}`}
+                {stayDay
+                  ? `Day ${stayDay}`
+                  : count === 0
+                    ? 'free'
+                    : `${count} school${count === 1 ? '' : 's'}`}
               </span>
             </button>
           )

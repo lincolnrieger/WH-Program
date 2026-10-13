@@ -1,4 +1,4 @@
-import type { ButtonHTMLAttributes, InputHTMLAttributes, ReactNode, SelectHTMLAttributes } from 'react'
+import type { ButtonHTMLAttributes, ComponentProps, ReactNode, SelectHTMLAttributes } from 'react'
 
 export function cx(...parts: (string | false | null | undefined)[]): string {
   return parts.filter(Boolean).join(' ')
@@ -47,7 +47,7 @@ export function IconButton({
   )
 }
 
-export function Input({ className, ...rest }: InputHTMLAttributes<HTMLInputElement>) {
+export function Input({ className, ...rest }: ComponentProps<'input'>) {
   return (
     <input
       className={cx(
@@ -79,7 +79,7 @@ export function Select({ className, children, ...rest }: SelectHTMLAttributes<HT
 export function Field({ label, children, hint }: { label: string; children: ReactNode; hint?: string }) {
   return (
     <label className="block">
-      <span className="mb-1 block text-[11px] font-medium tracking-wide text-[var(--ink-faint)] uppercase">
+      <span className="mb-1 block text-[12px] font-medium text-[var(--ink-soft)]">
         {label}
       </span>
       {children}
@@ -91,7 +91,7 @@ export function Field({ label, children, hint }: { label: string; children: Reac
 export function SectionTitle({ children, right }: { children: ReactNode; right?: ReactNode }) {
   return (
     <div className="flex items-center justify-between gap-2 px-3 pt-3 pb-1.5">
-      <h2 className="text-[11px] font-semibold tracking-wider text-[var(--ink-faint)] uppercase">
+      <h2 className="text-[12px] font-semibold text-[var(--ink-soft)]">
         {children}
       </h2>
       {right}

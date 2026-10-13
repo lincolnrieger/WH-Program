@@ -1,42 +1,85 @@
-import { useState } from 'react'
-import type { Booking, PackageTier } from '@/types'
+import { useMemo, useState } from 'react'
+import type { Block, Booking, PackageTier } from '@/types'
 import { PACKAGE_LABELS } from '@/types'
 import { BUILDINGS } from '@/data/venues'
 import { uid } from '@/lib/id'
+import { addDays, daysBetween } from '@/lib/time'
+import { followBooking } from '@/store/useStore'
 import { Modal } from '@/components/ui/Modal'
 import { Button, Field, IconButton, Input, Select, cx } from '@/components/ui/primitives'
 
 /** Name, student count, remove — shared by the header row and each group row. */
 const GROUP_ROW = 'grid grid-cols-[minmax(0,1fr)_76px_28px] items-center gap-1.5'
 
-/** Create or edit a school's stay: dates, package, building and groups. */
+/**
+ * Add a school, or edit one's stay: dates, package, building and groups.
+ *
+ * Nothing is written until Save, so cancelling an "Add a school" leaves
+ * nothing behind. Editing the dates or groups of a school that already has a
+ * program says what will happen to its sessions before it happens.
+ */
 export function BookingDialog({
   booking,
+  isNew,
+  blocks,
   onSave,
   onDelete,
   onClose,
 }: {
   booking: Booking
-  onSave: (patch: Partial<Booking>) => void
+  /** A draft that doesn't exist in the plan yet. */
+  isNew: boolean
+  /** This school's sessions, to say what a change of dates or groups does to them. */
+  blocks: Block[]
+  onSave: (next: Booking) => void
   onDelete?: () => void
   onClose: () => void
 }) {
   const [draft, setDraft] = useState<Booking>(booking)
+  const [tried, setTried] = useState(false)
 
   const buildings = BUILDINGS[draft.site] ?? []
+  const name = draft.schoolName.trim()
 
   function set<K extends keyof Booking>(key: K, value: Booking[K]) {
     setDraft((current) => ({ ...current, [key]: value }))
   }
 
+  // Moving the arrival keeps the length of the stay, which is what a rebooking
+  // almost always means; the departure is still free to change on its own.
+  function setArrival(value: string) {
+    if (!value) return
+    setDraft((current) => {
+      const length = daysBetween(current.startDate, current.endDate)
+      return { ...current, startDate: value, endDate: addDays(value, Math.max(length, 0)) }
+    })
+  }
+
+  const impact = useMemo(() => {
+    if (isNew) return { moved: 0, removed: 0, shift: 0 }
+    const shift = daysBetween(booking.startDate, draft.startDate)
+    let removed = 0
+    for (const block of blocks) {
+      if (!followBooking(block, booking, draft)) removed++
+    }
+    return { moved: shift === 0 ? 0 : blocks.length - removed, removed, shift }
+  }, [isNew, booking, draft, blocks])
+
+  function submit() {
+    setTried(true)
+    if (!name) return
+    onSave({ ...draft, schoolName: name })
+    onClose()
+  }
+
   return (
     <Modal
-      title={booking.schoolName ? 'Edit booking' : 'New booking'}
+      title={isNew ? 'Add a school' : 'Edit school'}
       width={560}
       onClose={onClose}
       footer={
         <>
-          {onDelete && (
+          {onDelete && !isNew && (
             <Button
               variant="danger"
               className="mr-auto"
@@ -45,29 +88,37 @@ export function BookingDialog({
                 onClose()
               }}
             >
-              Delete booking
+              Delete school
             </Button>
           )}
           <Button onClick={onClose}>Cancel</Button>
-          <Button
-            variant="primary"
-            onClick={() => {
-              onSave(draft)
-              onClose()
-            }}
-          >
-            Save
+          <Button variant="primary" type="submit" form="booking-form">
+            {isNew ? 'Add school' : 'Save changes'}
           </Button>
         </>
       }
     >
-      <div className="space-y-3">
+      <form
+        id="booking-form"
+        className="space-y-3"
+        onSubmit={(event) => {
+          event.preventDefault()
+          submit()
+        }}
+      >
         <Field label="School">
           <Input
             value={draft.schoolName}
             onChange={(event) => set('schoolName', event.target.value)}
             placeholder="e.g. Pulteney Grammar School"
+            aria-invalid={tried && !name}
+            className={cx(tried && !name && 'border-[var(--danger)]')}
           />
+          {tried && !name && (
+            <span className="mt-1 block text-[11.5px] text-[var(--danger)]">
+              Give the school a name — it heads the itinerary.
+            </span>
+          )}
         </Field>
 
         <div className="grid grid-cols-3 gap-2">
@@ -107,7 +158,7 @@ export function BookingDialog({
             <Input
               type="date"
               value={draft.startDate}
-              onChange={(event) => set('startDate', event.target.value)}
+              onChange={(event) => setArrival(event.target.value)}
             />
           </Field>
           <Field label="Departs">
@@ -115,7 +166,10 @@ export function BookingDialog({
               type="date"
               value={draft.endDate}
               min={draft.startDate}
-              onChange={(event) => set('endDate', event.target.value)}
+              onChange={(event) => {
+                const value = event.target.value
+                if (value) set('endDate', value < draft.startDate ? draft.startDate : value)
+              }}
             />
           </Field>
           <Field label="Building">
@@ -138,7 +192,7 @@ export function BookingDialog({
             {/* A grid rather than a flex row: two inputs that both want full
                 width end up fighting over it, and the name box collapses to a
                 square that reads as a stray control. */}
-            <div className={cx(GROUP_ROW, 'text-[10.5px] tracking-wide text-[var(--ink-faint)] uppercase')}>
+            <div className={cx(GROUP_ROW, 'text-[10.5px] text-[var(--ink-soft)]')}>
               <span>Name</span>
               <span>Students</span>
               <span />
@@ -208,7 +262,29 @@ export function BookingDialog({
             placeholder="Dietaries, access needs, organising teacher…"
           />
         </Field>
-      </div>
+
+        {(impact.moved > 0 || impact.removed > 0) && (
+          <div className="space-y-1 rounded-md bg-[var(--warn-tint)] px-3 py-2 text-[12px] leading-snug text-[var(--ink)]">
+            {impact.moved > 0 && (
+              <p>
+                {impact.moved} session{impact.moved === 1 ? '' : 's'} will move{' '}
+                {Math.abs(impact.shift)} day{Math.abs(impact.shift) === 1 ? '' : 's'}{' '}
+                {impact.shift > 0 ? 'later' : 'earlier'} with the stay.
+              </p>
+            )}
+            {impact.removed > 0 && (
+              <p>
+                <strong className="font-semibold">
+                  {impact.removed} session{impact.removed === 1 ? '' : 's'} will be removed
+                </strong>{' '}
+                — {impact.removed === 1 ? 'it falls' : 'they fall'} outside the new dates or
+                {impact.removed === 1 ? ' was' : ' were'} only on a group you’ve taken out. Undo
+                brings {impact.removed === 1 ? 'it' : 'them'} back.
+              </p>
+            )}
+          </div>
+        )}
+      </form>
     </Modal>
   )
 }

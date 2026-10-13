@@ -32,10 +32,15 @@ around, nothing to remember to save.
 - Type times directly in the inspector — `9`, `930`, `9:30`, `1.30pm` all work.
 - Arrow keys nudge the selection: up/down to move, <kbd>Alt</kbd>+up/down to
   resize, left/right to move between group columns.
+- Click an activity instead of dragging it and it goes into the earliest free
+  slot on the open day, across whichever group has room first.
+- The inspector can swap a session's activity in place — same slot, same
+  groups, the new activity's venue.
 
 **Faster than a spreadsheet**
 - **Day templates** — Arrival day, Full day, Departure day, Day visit. Lays down
   the meals and logistics at the standard times so only activities are left.
+  An empty day offers the one that fits where it falls in the stay.
 - **Add activities** — two questions. *Pick the activities*, then *choose how
   they go in*:
   - **I'll place them** puts them at the top of the palette under **Picked** and
@@ -44,23 +49,33 @@ around, nothing to remember to save.
   - **Fill the timetable** lays them out as a rotation instead: every group does
     every activity once, no two groups collide, and across days it keeps
     counting rather than restarting, so Tuesday picks up where Monday left off.
-- **Add a custom activity** — the box at the top of the palette takes a name and
-  makes an activity there and then, ready to drag. It's a real catalogue entry,
-  so its colour and length are editable on the Activities page afterwards.
+- **Find or add an activity** — the one box at the top of the palette searches
+  the catalogue, and a name it doesn't have is offered as a new activity
+  (<kbd>Enter</kbd> adds it), ready to drag. It's a real catalogue entry, so its
+  colour and length are editable on the Activities page afterwards.
 - **View** sets how the grid is drawn, as choices rather than dials: a **size**
   (Compact to Huge), which **hours** to show (activity hours, the whole camp
-  day, everything, or a pair of times you set), what dragging **snaps** to, and
-  whether blocks carry their times and venue. It remembers what you picked.
-- Undo/redo across everything (<kbd>Ctrl</kbd>+<kbd>Z</kbd>).
+  day, everything, or a pair of times you set), what dragging **snaps** to,
+  whether blocks carry their times and venue, and light or dark. It remembers
+  what you picked.
+- Undo/redo across everything (<kbd>Ctrl</kbd>+<kbd>Z</kbd>). Typing in a field
+  undoes as one step, not a letter at a time. Deleting or clearing anything
+  doesn't ask first; it says what it did, with an **Undo** button right there.
 
-**Five sections**
-- **Plan** — one school at a time. **Day** is a column per group for the day
-  you're on, the close-up you build in; **Whole stay** lays every day of the
-  visit out side by side against the same time axis, which is the view you want
-  when you're checking a group doesn't do the tube slide twice, or dragging
-  Wednesday's spare session back to Tuesday. Clicking a day's heading in that
-  view opens it on its own. The **Schools** list beside it is the week you're
-  looking at, not the whole term; search it to reach any school in any week.
+**The sections** — the two you plan in, then the three lists they draw on.
+- **Plan a school** — one school at a time. The schools on site that week are
+  tabs above the grid; **Find a school** reaches any other week, and
+  **+ Add school** opens a blank one (nothing is created until you press *Add
+  school*). **One day** is a column per group for the day you're on, the
+  close-up you build in; **Whole stay** lays every day of the visit out side by
+  side against the same time axis, which is the view you want when you're
+  checking a group doesn't do the tube slide twice, or dragging Wednesday's
+  spare session back to Tuesday. Clicking a day's heading in that view opens it
+  on its own. **More** holds the school's own actions: edit its details, save
+  it as a spreadsheet, clear a day, delete it.
+- Changing a school's dates moves its sessions with it, and the dialog says
+  beforehand how many will move and how many fall outside the new stay or onto
+  a group you've removed.
 - **Whole site** — the holistic picture, as a **day** or a whole **week**, for
   every school or just one. Day mode is the same grid as the planning view, one
   block of columns per school, with sessions draggable straight from one school
@@ -73,6 +88,9 @@ around, nothing to remember to save.
 
 The week bar under the toolbar moves between weeks and days, labelled the way
 camps are actually booked: **Term 3 Week 9**, with the calendar dates under it.
+On the plan page the open school's days are tinted and read **Day 1**,
+**Day 2**…, and picking a day the school isn't here for opens whichever school
+is.
 The week picker lists whole weeks the same way, with a dot per school on site,
 so jumping to the week you mean is one click. South Australian term dates are
 in `src/lib/term.ts` — see [DATA.md](DATA.md#school-terms).
@@ -106,11 +124,11 @@ Activity colours are the fills from the colour key, at full strength.
 The paper size is set for you; turn on **Background graphics** in the print
 dialog so the colours come through.
 
-**As a spreadsheet**, the same two sheets come out of the Program menu as real
+**As a spreadsheet**, the same two sheets come out of the File menu as real
 `.xlsx` files laid out like the workbooks they replace, with the exact fills
 from the colour key and the key itself on its own tab.
 
-**Import** (Program → *Import from spreadsheets*) reads the workbooks the
+**Import** (File → *Import from spreadsheets*) reads the workbooks the
 program was run from before this app and turns them into bookings and sessions.
 Drop in a week's `.xlsx` files or the zipped week folder itself; both the
 holistic week sheet and the schools' own itineraries are understood, and a stay
@@ -127,7 +145,7 @@ and "Challenge Hill (Dry)" to the activities they extend. Anything still
 unrecognised is added to the catalogue keeping the colour it had in the
 spreadsheet, rather than being dropped.
 
-**Program menu**, in three parts — what you bring in, what you take out, and
+**File menu**, in three parts — what you bring in, what you take out, and
 the plan as a whole.
 - *Save this week as a spreadsheet* / *Save <school> as a spreadsheet* — the
   holistic sheet and the open school's itinerary as `.xlsx`.
@@ -192,7 +210,7 @@ There's still no login, so put Cloudflare Access in front of the site —
 API as well as the pages.
 
 [SETUP.md](SETUP.md#the-database) has the schema, how to query it and how to
-take a backup — worth doing before **Program → Start fresh**, which empties the
+take a backup — worth doing before **File → Start fresh**, which empties the
 plan for everyone.
 
 ## Running it locally

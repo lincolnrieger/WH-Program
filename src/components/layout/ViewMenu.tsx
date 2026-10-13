@@ -49,9 +49,12 @@ const SNAP_OPTIONS = [5, 10, 15, 30]
 export function ViewMenu({
   prefs,
   onChange,
+  showsGrid,
 }: {
   prefs: Prefs
   onChange: (patch: Partial<Prefs>) => void
+  /** Off on the list pages, where only the theme applies. */
+  showsGrid: boolean
 }) {
   const [open, setOpen] = useState(false)
   const [custom, setCustom] = useState(false)
@@ -90,84 +93,99 @@ export function ViewMenu({
             aria-label="View settings"
             className="absolute right-0 z-50 mt-1.5 w-[290px] rounded-xl border border-[var(--line)] bg-[var(--surface)] p-3 shadow-[var(--shadow-lg)]"
           >
-            <Group label="Size">
-              <Segmented
-                options={SIZES.map((option) => ({
-                  id: option.id,
-                  label: option.label,
-                  active: option.id === size.id,
-                  onSelect: () => onChange({ zoom: option.zoom }),
-                }))}
-              />
-            </Group>
-
-            <Group label="Hours shown">
-              <div className="space-y-1">
-                {HOURS.map((option) => (
-                  <Choice
-                    key={option.id}
-                    on={!showCustom && hours?.id === option.id}
-                    label={option.label}
-                    detail={option.detail}
-                    onClick={() => {
-                      setCustom(false)
-                      onChange({ dayStartMin: option.start, dayEndMin: option.end })
-                    }}
+            {showsGrid && (
+              <>
+                <Group label="Size">
+                  <Segmented
+                    options={SIZES.map((option) => ({
+                      id: option.id,
+                      label: option.label,
+                      active: option.id === size.id,
+                      onSelect: () => onChange({ zoom: option.zoom }),
+                    }))}
                   />
-                ))}
-                <Choice
-                  on={showCustom}
-                  label="Custom"
-                  detail={`${formatTimeFull(prefs.dayStartMin)} – ${formatTimeFull(prefs.dayEndMin)}`}
-                  onClick={() => setCustom(true)}
-                />
-              </div>
+                </Group>
 
-              {showCustom && (
-                <div className="mt-1.5 flex items-center gap-1.5">
-                  <TimeBox
-                    label="From"
-                    value={prefs.dayStartMin}
-                    onCommit={(min) =>
-                      onChange({ dayStartMin: Math.min(min, prefs.dayEndMin - 60) })
-                    }
+                <Group label="Hours shown">
+                  <div className="space-y-1">
+                    {HOURS.map((option) => (
+                      <Choice
+                        key={option.id}
+                        on={!showCustom && hours?.id === option.id}
+                        label={option.label}
+                        detail={option.detail}
+                        onClick={() => {
+                          setCustom(false)
+                          onChange({ dayStartMin: option.start, dayEndMin: option.end })
+                        }}
+                      />
+                    ))}
+                    <Choice
+                      on={showCustom}
+                      label="Custom"
+                      detail={`${formatTimeFull(prefs.dayStartMin)} – ${formatTimeFull(prefs.dayEndMin)}`}
+                      onClick={() => setCustom(true)}
+                    />
+                  </div>
+
+                  {showCustom && (
+                    <div className="mt-1.5 flex items-center gap-1.5">
+                      <TimeBox
+                        label="From"
+                        value={prefs.dayStartMin}
+                        onCommit={(min) =>
+                          onChange({ dayStartMin: Math.min(min, prefs.dayEndMin - 60) })
+                        }
+                      />
+                      <TimeBox
+                        label="To"
+                        value={prefs.dayEndMin}
+                        onCommit={(min) => onChange({ dayEndMin: Math.max(min, prefs.dayStartMin + 60) })}
+                      />
+                    </div>
+                  )}
+                </Group>
+
+                <Group label="Snap dragging to">
+                  <Segmented
+                    options={SNAP_OPTIONS.map((value) => ({
+                      id: String(value),
+                      label: `${value}m`,
+                      active: prefs.snapMinutes === value,
+                      onSelect: () => onChange({ snapMinutes: value }),
+                    }))}
                   />
-                  <TimeBox
-                    label="To"
-                    value={prefs.dayEndMin}
-                    onCommit={(min) => onChange({ dayEndMin: Math.max(min, prefs.dayStartMin + 60) })}
+                  <p className="mt-1 text-[10.5px] text-[var(--ink-faint)]">
+                    Hold <kbd className="font-sans font-semibold">Alt</kbd> while dragging for
+                    5-minute steps whatever this says.
+                  </p>
+                </Group>
+
+                <div className="mb-3 space-y-0.5">
+                  <Toggle
+                    label="Times on blocks"
+                    checked={prefs.showBlockTimes}
+                    onChange={(showBlockTimes) => onChange({ showBlockTimes })}
+                  />
+                  <Toggle
+                    label="Venue on blocks"
+                    checked={prefs.showBlockDetail}
+                    onChange={(showBlockDetail) => onChange({ showBlockDetail })}
                   />
                 </div>
-              )}
-            </Group>
+              </>
+            )}
 
-            <Group label="Snap dragging to">
+            <Group label="Theme" last>
               <Segmented
-                options={SNAP_OPTIONS.map((value) => ({
-                  id: String(value),
-                  label: `${value}m`,
-                  active: prefs.snapMinutes === value,
-                  onSelect: () => onChange({ snapMinutes: value }),
+                options={(['light', 'dark'] as const).map((theme) => ({
+                  id: theme,
+                  label: theme === 'light' ? 'Light' : 'Dark',
+                  active: prefs.theme === theme,
+                  onSelect: () => onChange({ theme }),
                 }))}
               />
-              <p className="mt-1 text-[10.5px] text-[var(--ink-faint)]">
-                Hold <kbd className="font-sans font-semibold">Alt</kbd> while dragging for
-                5-minute steps whatever this says.
-              </p>
             </Group>
-
-            <div className="space-y-0.5 border-t border-[var(--line)] pt-2">
-              <Toggle
-                label="Times on blocks"
-                checked={prefs.showBlockTimes}
-                onChange={(showBlockTimes) => onChange({ showBlockTimes })}
-              />
-              <Toggle
-                label="Venue on blocks"
-                checked={prefs.showBlockDetail}
-                onChange={(showBlockDetail) => onChange({ showBlockDetail })}
-              />
-            </div>
           </div>
         </>
       )}
@@ -175,10 +193,18 @@ export function ViewMenu({
   )
 }
 
-function Group({ label, children }: { label: string; children: React.ReactNode }) {
+function Group({
+  label,
+  children,
+  last,
+}: {
+  label: string
+  children: React.ReactNode
+  last?: boolean
+}) {
   return (
-    <div className="mb-3">
-      <span className="mb-1 block text-[10.5px] font-semibold tracking-wide text-[var(--ink-faint)] uppercase">
+    <div className={last ? undefined : 'mb-3'}>
+      <span className="mb-1 block text-[10.5px] font-semibold text-[var(--ink-soft)]">
         {label}
       </span>
       {children}
