@@ -13,16 +13,22 @@ export interface InspectorProps {
   venues: Venue[]
   site: Site
   onClose: () => void
+  /** Deletes the blocks; the app owns this so it can offer an undo. */
+  onRemove: (ids: string[]) => void
 }
 
 /**
  * Edits whatever is currently selected. Multi-selection edits the fields that
  * make sense in bulk (time, delivery, venue) and leaves the rest alone.
+ *
+ * Fields run in the order the questions get asked: what is it, when, who,
+ * how it's run and where — then the notes.
  */
-export function Inspector({ blocks, booking, activities, venues, site, onClose }: InspectorProps) {
+export function Inspector({
+  blocks, booking, activities, venues, site, onClose, onRemove,
+}: InspectorProps) {
   const updateBlock = useStore((s) => s.updateBlock)
   const updateBlocks = useStore((s) => s.updateBlocks)
-  const removeBlocks = useStore((s) => s.removeBlocks)
   const duplicateBlocks = useStore((s) => s.duplicateBlocks)
 
   const single = blocks.length === 1 ? blocks[0] : undefined
@@ -30,6 +36,31 @@ export function Inspector({ blocks, booking, activities, venues, site, onClose }
   const activity = single?.activityId ? activities.get(single.activityId) : undefined
 
   const siteVenues = useMemo(() => venues.filter((v) => v.sites.includes(site)), [venues, site])
+  const siteActivities = useMemo(
+    () =>
+      [...activities.values()]
+        .filter((a) => a.sites.includes(site) || a.id === single?.activityId)
+        .sort((a, b) => a.name.localeCompare(b.name)),
+    [activities, site, single?.activityId],
+  )
+
+  /**
+   * Swapping one activity for another keeps the slot and the groups but takes
+   * the new activity's name and, unless a venue was chosen by hand, its venue.
+   */
+  function swapActivity(block: Block, nextId: string) {
+    const next = activities.get(nextId)
+    if (!next) return
+    const previous = block.activityId ? activities.get(block.activityId) : undefined
+    const venueWasDefault = !block.venueId || (previous?.venueIds.includes(block.venueId) ?? false)
+    const titleWasDefault = !block.title || block.title === previous?.name
+    updateBlock(block.id, {
+      activityId: next.id,
+      title: titleWasDefault ? undefined : block.title,
+      venueId: venueWasDefault ? next.venueIds[0] : block.venueId,
+      delivery: next.deliveries.includes(block.delivery) ? block.delivery : (next.deliveries[0] ?? 'staff'),
+    })
+  }
 
   if (blocks.length === 0) return null
 
@@ -37,29 +68,84 @@ export function Inspector({ blocks, booking, activities, venues, site, onClose }
     <aside className="flex h-full min-h-0 w-[300px] shrink-0 flex-col border-l border-[var(--line)] bg-[var(--surface)]">
       <header className="flex items-center justify-between gap-2 border-b border-[var(--line)] px-3 py-2">
         <h2 className="truncate text-[13px] font-semibold">
-          {single ? blockTitle(single, activity) : `${blocks.length} blocks selected`}
+          {single ? blockTitle(single, activity) : `${blocks.length} sessions selected`}
         </h2>
-        <IconButton label="Close inspector" onClick={onClose}>
+        <IconButton label="Close (Esc)" onClick={onClose}>
           &#10005;
         </IconButton>
       </header>
 
       <div className="min-h-0 flex-1 space-y-3 overflow-y-auto p-3">
-        <TimeFields blocks={blocks} onChange={(patch) => updateBlocks(ids, patch)} />
+        {single && single.kind === 'activity' && (
+          <Field label="Activity">
+            <Select
+              value={single.activityId ?? ''}
+              onChange={(event) => swapActivity(single, event.target.value)}
+            >
+              {!single.activityId && <option value="">Choose an activity</option>}
+              {siteActivities.map((option) => (
+                <option key={option.id} value={option.id}>
+                  {option.name}
+                </option>
+              ))}
+            </Select>
+          </Field>
+        )}
 
         {single && (
-          <Field label="Title" hint="Line breaks are kept — useful for “Breakfast / Pack bags”.">
+          <Field
+            label={single.kind === 'activity' ? 'Title on the itinerary' : 'Title'}
+            hint={
+              single.kind === 'activity'
+                ? 'Change it only if the sheet should say something else.'
+                : 'Press Enter for a second line, e.g. “Breakfast / Pack bags”.'
+            }
+          >
             <textarea
               value={single.title ?? activity?.name ?? ''}
               placeholder={activity?.name ?? 'Block title'}
               rows={2}
-              onChange={(event) => updateBlock(single.id, { title: event.target.value || undefined })}
+              onChange={(event) =>
+                updateBlock(single.id, { title: event.target.value || undefined }, `title:${single.id}`)
+              }
               className="w-full resize-y rounded-md border border-[var(--line)] bg-[var(--surface)] px-2.5 py-1.5 text-[13px] text-[var(--ink)] placeholder:text-[var(--ink-faint)] focus:border-[var(--brand-soft)] focus:outline-none"
             />
           </Field>
         )}
 
-        <Field label="Delivery" hint="Teacher led prints as “- TL”, self led as “- Self Led”.">
+        <TimeFields blocks={blocks} onChange={(patch) => updateBlocks(ids, patch)} />
+
+        {booking && single && (
+          <Field label="Groups" hint="Pick more than one to run it across those columns.">
+            <div className="flex flex-wrap gap-1">
+              {booking.groups.map((group) => {
+                const on = single.groupIds.includes(group.id)
+                return (
+                  <Chip
+                    key={group.id}
+                    active={on}
+                    onClick={() => {
+                      const next = on
+                        ? single.groupIds.filter((id) => id !== group.id)
+                        : [...single.groupIds, group.id]
+                      if (next.length === 0) return
+                      updateBlock(single.id, { groupIds: next })
+                    }}
+                  >
+                    {group.name}
+                  </Chip>
+                )
+              })}
+              {booking.groups.length > 1 && (
+                <Chip onClick={() => updateBlock(single.id, { groupIds: booking.groups.map((g) => g.id) })}>
+                  Whole school
+                </Chip>
+              )}
+            </div>
+          </Field>
+        )}
+
+        <Field label="Run by" hint="Teacher led prints as “- TL”, self led as “- Self Led”.">
           <Select
             value={single?.delivery ?? ''}
             onChange={(event) =>
@@ -89,39 +175,13 @@ export function Inspector({ blocks, booking, activities, venues, site, onClose }
           </Select>
         </Field>
 
-        {booking && single && (
-          <Field label="Groups" hint="Select more than one to merge the block across columns.">
-            <div className="flex flex-wrap gap-1">
-              {booking.groups.map((group) => {
-                const on = single.groupIds.includes(group.id)
-                return (
-                  <Chip
-                    key={group.id}
-                    active={on}
-                    onClick={() => {
-                      const next = on
-                        ? single.groupIds.filter((id) => id !== group.id)
-                        : [...single.groupIds, group.id]
-                      if (next.length === 0) return
-                      updateBlock(single.id, { groupIds: next })
-                    }}
-                  >
-                    {group.name}
-                  </Chip>
-                )
-              })}
-              <Chip onClick={() => updateBlock(single.id, { groupIds: booking.groups.map((g) => g.id) })}>
-                All
-              </Chip>
-            </div>
-          </Field>
-        )}
-
         {single && (
           <Field label="Note">
             <textarea
               value={single.note ?? ''}
-              onChange={(event) => updateBlock(single.id, { note: event.target.value || undefined })}
+              onChange={(event) =>
+                updateBlock(single.id, { note: event.target.value || undefined }, `note:${single.id}`)
+              }
               rows={2}
               placeholder="Anything worth writing on the itinerary…"
               className="w-full resize-y rounded-md border border-[var(--line)] bg-[var(--surface)] px-2.5 py-1.5 text-[13px] text-[var(--ink)] placeholder:text-[var(--ink-faint)] focus:border-[var(--brand-soft)] focus:outline-none"
@@ -129,8 +189,14 @@ export function Inspector({ blocks, booking, activities, venues, site, onClose }
           </Field>
         )}
 
+        {activity?.notes && (
+          <p className="rounded-md bg-[var(--surface-sunk)] px-2 py-1.5 text-[11.5px] leading-snug text-[var(--ink-soft)]">
+            {activity.notes}
+          </p>
+        )}
+
         {single && (
-          <Field label="Type">
+          <Field label="Kind of block" hint="Sets how it’s coloured and printed.">
             <Select
               value={single.kind}
               onChange={(event) => updateBlock(single.id, { kind: event.target.value as Block['kind'] })}
@@ -143,25 +209,26 @@ export function Inspector({ blocks, booking, activities, venues, site, onClose }
             </Select>
           </Field>
         )}
-
-        {activity?.notes && (
-          <p className="rounded-md bg-[var(--surface-sunk)] px-2 py-1.5 text-[11.5px] leading-snug text-[var(--ink-soft)]">
-            {activity.notes}
-          </p>
-        )}
       </div>
 
       <footer className="flex shrink-0 items-center gap-1.5 border-t border-[var(--line)] px-3 py-2">
         <Button
           size="sm"
+          title="A locked block can't be dragged by accident"
           onClick={() => updateBlocks(ids, { locked: !blocks.every((b) => b.locked) })}
         >
           {blocks.every((b) => b.locked) ? 'Unlock' : 'Lock'}
         </Button>
-        <Button size="sm" onClick={() => duplicateBlocks(ids)}>
+        <Button size="sm" title="Duplicate (Ctrl+D)" onClick={() => duplicateBlocks(ids)}>
           Duplicate
         </Button>
-        <Button size="sm" variant="danger" className="ml-auto" onClick={() => removeBlocks(ids)}>
+        <Button
+          size="sm"
+          variant="danger"
+          className="ml-auto"
+          title="Delete (Del)"
+          onClick={() => onRemove(ids)}
+        >
           Delete
         </Button>
       </footer>
@@ -263,13 +330,10 @@ function TimeFields({
   )
 }
 
-/** Each block moves by the same delta, so this can't go through a shared patch. */
+/** Each block moves by the same delta — one patch per block, one undo for all. */
 function shift(blocks: Block[], delta: number): void {
-  const store = useStore.getState()
-  for (const block of blocks) {
-    store.updateBlock(block.id, {
-      startMin: block.startMin + delta,
-      endMin: block.endMin + delta,
-    })
-  }
+  useStore.getState().updateEach(
+    blocks.map((b) => b.id),
+    (block) => (block.locked ? null : { startMin: block.startMin + delta, endMin: block.endMin + delta }),
+  )
 }

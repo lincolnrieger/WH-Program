@@ -1,11 +1,12 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
-import type { Booking } from '@/types'
+import type { Block, Booking } from '@/types'
 import { SITES } from '@/types'
 import { ROUTINES } from '@/data/activities'
 import {
   resolveActivities, resolveActivityMap, resolveStaff, resolveVenueMap, resolveVenues,
 } from '@/data/resolve'
-import { useStore } from '@/store/useStore'
+import { newBookingDraft, useStore } from '@/store/useStore'
+import { DAY_TEMPLATES } from '@/data/templates'
 import { flushNow, refresh, startSync, subscribeToSync, syncState, type SyncState } from '@/store/sync'
 import { useDragController } from '@/hooks/useDragController'
 import { useKeyboardShortcuts } from '@/hooks/useKeyboardShortcuts'
@@ -13,11 +14,12 @@ import { exportBackup, pickBackupFile, readBackup } from '@/lib/backup'
 import { exportBookingWorkbook, exportHolisticWorkbook } from '@/lib/excelExport'
 import { exportCsv } from '@/lib/exportImport'
 import { suggestSlots } from '@/lib/rotation'
-import { addDays, startOfWeek } from '@/lib/time'
+import { addDays, formatTimeFull, startOfWeek, weekdayShort } from '@/lib/time'
 import { TopBar } from '@/components/layout/TopBar'
 import { WeekBar } from '@/components/layout/WeekBar'
 import { SyncNotice } from '@/components/layout/SyncNotice'
 import { Sidebar } from '@/components/layout/Sidebar'
+import { SchoolBar } from '@/components/layout/SchoolBar'
 import { BookingView } from '@/components/schedule/BookingView'
 import { WeekView } from '@/components/week/WeekView'
 import { DragGhost } from '@/components/schedule/DragGhost'
@@ -48,15 +50,33 @@ export default function App() {
   const canRedo = useStore((s) => s.future.length > 0)
 
   const [rotationOpen, setRotationOpen] = useState(false)
-  const [editingBooking, setEditingBooking] = useState<Booking | null>(null)
+  const [editingBooking, setEditingBooking] = useState<{ booking: Booking; isNew: boolean } | null>(null)
   const [printOpen, setPrintOpen] = useState(false)
   const [importOpen, setImportOpen] = useState(false)
   const [printOptions, setPrintOptions] = useState<PrintOptions>(DEFAULT_PRINT_OPTIONS)
-  const [toast, setToast] = useState<string | null>(null)
+  const [toast, setToastState] = useState<{ message: string; undo: boolean; key: number } | null>(null)
   const [sync, setSync] = useState<SyncState>(() => syncState())
 
+  /**
+   * Says what just happened. Anything that removed or replaced work offers an
+   * Undo right there, which is kinder than an "are you sure?" up front and
+   * means the common case costs one click instead of two.
+   */
+  const setToast = useCallback((message: string, undo = false) => {
+    setToastState({ message, undo, key: Date.now() })
+  }, [])
+
+  const removeBlocks = useCallback(
+    (ids: string[]) => {
+      if (ids.length === 0) return
+      useStore.getState().removeBlocks(ids)
+      setToast(ids.length === 1 ? 'Session deleted.' : `${ids.length} sessions deleted.`, true)
+    },
+    [setToast],
+  )
+
   useDragController()
-  useKeyboardShortcuts({ onPrint: () => setPrintOpen(true) })
+  useKeyboardShortcuts({ onPrint: () => setPrintOpen(true), onDelete: removeBlocks })
 
   // Read the shared plan, then keep watching for anyone else's changes.
   useEffect(() => subscribeToSync(setSync), [])
@@ -90,7 +110,7 @@ export default function App() {
 
   useEffect(() => {
     if (!toast) return
-    const timer = window.setTimeout(() => setToast(null), 3200)
+    const timer = window.setTimeout(() => setToastState(null), toast.undo ? 7000 : 3500)
     return () => window.clearTimeout(timer)
   }, [toast])
 
@@ -141,74 +161,118 @@ export default function App() {
     useStore.getState().clearSelection()
   }, [])
 
-  /** Click-to-place from the palette: drops into the first free gap of the day. */
+  /**
+   * Click-to-place from the palette: the earliest free gap on the open day,
+   * looking across every group rather than only the first, so clicking
+   * through a list of activities spreads them over the groups.
+   */
   const quickAdd = useCallback(
     (payload: { type: 'activity'; id: string } | { type: 'routine'; id: string }) => {
       const store = useStore.getState()
       const target = store.doc.bookings.find((b) => b.id === store.activeBookingId)
-      if (!target) {
-        setToast('Pick a school first.')
+      if (!target || target.groups.length === 0) {
+        setToast('Open a school first.')
         return
       }
       const day = store.activeDate ?? target.startDate
+      if (day < target.startDate || day > target.endDate) {
+        setToast(`${target.schoolName} isn’t on site that day.`)
+        return
+      }
       const existing = store.doc.blocks.filter((b) => b.bookingId === target.id && b.date === day)
 
-      const duration =
-        payload.type === 'activity'
-          ? (activities.get(payload.id)?.defaultDurationMin ?? 90)
-          : (ROUTINES.find((r) => r.id === payload.id)?.durationMin ?? 60)
+      const activity = payload.type === 'activity' ? activities.get(payload.id) : undefined
+      const routine = payload.type === 'routine' ? ROUTINES.find((r) => r.id === payload.id) : undefined
+      if (!activity && !routine) return
 
-      const gaps = suggestSlots(
-        existing.filter((b) => b.groupIds.includes(target.groups[0]?.id ?? '')),
-        { dayStart: prefs.dayStartMin, dayEnd: prefs.dayEndMin, minLength: duration },
-      )
-      const startMin = gaps[0]?.startMin ?? prefs.dayStartMin
+      const duration = activity?.defaultDurationMin ?? routine?.durationMin ?? 60
+      const hours = { dayStart: prefs.dayStartMin, dayEnd: prefs.dayEndMin }
 
-      if (payload.type === 'activity') {
-        const activity = activities.get(payload.id)
-        if (!activity) return
-        const id = store.addBlock({
-          bookingId: target.id,
-          date: day,
-          startMin,
-          endMin: startMin + duration,
-          groupIds: [target.groups[0].id],
-          kind: 'activity',
-          activityId: activity.id,
-          delivery: activity.deliveries[0] ?? 'staff',
-          venueId: activity.venueIds[0],
-        })
-        store.select([id])
-        store.setHighlight([id])
-      } else {
-        const routine = ROUTINES.find((r) => r.id === payload.id)
-        if (!routine) return
-        const id = store.addBlock({
-          bookingId: target.id,
-          date: day,
-          startMin,
-          endMin: startMin + duration,
-          groupIds: routine.wholeSchool ? target.groups.map((g) => g.id) : [target.groups[0].id],
-          kind: routine.kind,
-          title: routine.title,
-          delivery: routine.delivery ?? 'staff',
-          colour: routine.colour,
-        })
-        store.select([id])
-        store.setHighlight([id])
+      // A whole-school routine needs the time free for everyone at once.
+      const candidates = routine?.wholeSchool
+        ? [{ groupIds: target.groups.map((g) => g.id), blocks: existing }]
+        : target.groups.map((group) => ({
+            groupIds: [group.id],
+            blocks: existing.filter((b) => b.groupIds.includes(group.id)),
+          }))
+
+      let best: { groupIds: string[]; startMin: number } | null = null
+      for (const candidate of candidates) {
+        const startMin = firstFreeStart(candidate.blocks, duration, hours)
+        if (startMin !== null && (best === null || startMin < best.startMin)) {
+          best = { groupIds: candidate.groupIds, startMin }
+        }
       }
+      if (!best) {
+        setToast('No free time left on this day — drag it where you want it instead.')
+        return
+      }
+
+      const base = {
+        bookingId: target.id,
+        date: day,
+        startMin: best.startMin,
+        endMin: best.startMin + duration,
+        groupIds: best.groupIds,
+      }
+      const id = activity
+        ? store.addBlock({
+            ...base,
+            kind: 'activity',
+            activityId: activity.id,
+            delivery: activity.deliveries[0] ?? 'staff',
+            venueId: activity.venueIds[0],
+          })
+        : store.addBlock({
+            ...base,
+            kind: routine!.kind,
+            title: routine!.title,
+            delivery: routine!.delivery ?? 'staff',
+            colour: routine!.colour,
+          })
+      store.select([id])
+      store.setHighlight([id])
+
+      const who =
+        best.groupIds.length === target.groups.length && target.groups.length > 1
+          ? 'the whole school'
+          : (target.groups.find((g) => g.id === best.groupIds[0])?.name ?? 'the group')
+      const name = activity?.name ?? routine!.title.split('\n')[0]
+      setToast(`${name} added for ${who} at ${formatTimeFull(best.startMin)}.`, true)
     },
-    [activities, prefs.dayStartMin, prefs.dayEndMin],
+    [activities, prefs.dayStartMin, prefs.dayEndMin, setToast],
   )
 
-  const addCustomActivity = useCallback((name: string) => {
-    const id = useStore.getState().addCustomActivity(name)
-    setToast(
-      id
-        ? `“${name.trim()}” is ready at the top of the list — drag it onto the grid.`
-        : 'Give the activity a name first.',
-    )
-  }, [])
+  const addCustomActivity = useCallback(
+    (name: string) => {
+      const id = useStore.getState().addCustomActivity(name)
+      setToast(
+        id
+          ? `“${name.trim()}” is ready at the top of the list — drag it onto the grid.`
+          : 'Give the activity a name first.',
+      )
+    },
+    [setToast],
+  )
+
+  const openNewSchool = useCallback(
+    (startDate: string) => {
+      setEditingBooking({ booking: newBookingDraft(doc.site, startDate), isNew: true })
+    },
+    [doc.site],
+  )
+
+  const deleteSchool = useCallback(
+    (target: Booking) => {
+      const sessions = doc.blocks.filter((b) => b.bookingId === target.id).length
+      useStore.getState().removeBooking(target.id)
+      setToast(
+        `${target.schoolName || 'School'} deleted${sessions ? `, with its ${sessions} session${sessions === 1 ? '' : 's'}` : ''}.`,
+        true,
+      )
+    },
+    [doc.blocks, setToast],
+  )
 
   const loadSample = useCallback(async () => {
     if (
@@ -225,7 +289,7 @@ export default function App() {
     } catch (error) {
       setToast(error instanceof Error ? error.message : 'Could not add the sample week.')
     }
-  }, [doc.bookings.length])
+  }, [doc.bookings.length, setToast])
 
   const startFresh = useCallback(async () => {
     if (
@@ -241,7 +305,7 @@ export default function App() {
     } catch (error) {
       setToast(error instanceof Error ? error.message : 'Could not clear the plan.')
     }
-  }, [])
+  }, [setToast])
 
   const restoreBackup = useCallback(async () => {
     const file = await pickBackupFile()
@@ -261,7 +325,7 @@ export default function App() {
     } catch (error) {
       setToast(error instanceof Error ? error.message : 'Could not read that backup.')
     }
-  }, [doc.site])
+  }, [doc.site, setToast])
 
   // What the print sheet will contain, given the chosen scope. The two site
   // scopes hand over every booking and let the sheet decide — it already knows
@@ -284,7 +348,7 @@ export default function App() {
   const exportWeekExcel = useCallback(() => {
     exportHolisticWorkbook({ ...excelInput, bookings: siteBookings, date })
     setToast('Week saved as a spreadsheet.')
-  }, [excelInput, siteBookings, date])
+  }, [excelInput, siteBookings, date, setToast])
 
   const exportSchoolExcel = useCallback(() => {
     if (!booking) {
@@ -293,7 +357,7 @@ export default function App() {
     }
     exportBookingWorkbook({ ...excelInput, bookings: [booking] })
     setToast(`${booking.schoolName} saved as a spreadsheet.`)
-  }, [excelInput, booking])
+  }, [excelInput, booking, setToast])
 
   const weekBounds = useMemo(() => {
     const start = startOfWeek(date)
@@ -336,6 +400,7 @@ export default function App() {
         <WeekBar
           bookings={siteBookings}
           date={date}
+          stay={page === 'plan' ? booking : undefined}
           onDateChange={(next) => useStore.getState().setActiveDate(next)}
         />
       )}
@@ -350,81 +415,45 @@ export default function App() {
             search={search}
             onSearch={(value) => useStore.getState().setSearch(value)}
             onQuickAdd={quickAdd}
-            canAdd={Boolean(booking)}
+            canAdd={Boolean(booking) || page === 'site'}
             onAddCustom={addCustomActivity}
             onUnpick={(id) => useStore.getState().unpickActivity(id)}
             onClearPicked={() => useStore.getState().clearPicked()}
-            bookings={siteBookings}
-            date={date}
-            activeBookingId={activeBookingId}
-            onSelectBooking={(id) => {
-              useStore.getState().setActiveBooking(id)
-              useStore.getState().setPage('plan')
-            }}
-            onNewBooking={() => {
-              const id = useStore.getState().addBooking({ startDate: date })
-              const created = useStore.getState().doc.bookings.find((b) => b.id === id)
-              if (created) setEditingBooking(created)
-            }}
-            onEditBooking={(id) => {
-              const found = doc.bookings.find((b) => b.id === id)
-              if (found) setEditingBooking(found)
-            }}
           />
         )}
 
-        <main className="no-print flex min-w-0 flex-1">
-          {page === 'staff' && (
-            <StaffPage site={doc.site} activities={activityList} staff={staffList} />
-          )}
-
-          {page === 'activities' && (
-            <ActivitiesPage
-              site={doc.site}
-              activities={activityList}
-              venues={venueList}
-              dark={prefs.theme === 'dark'}
-            />
-          )}
-
-          {page === 'venues' && (
-            <VenuesPage site={doc.site} venues={venueList} activities={activityList} />
-          )}
-
-          {page === 'site' && (
-            <WeekView
+        <main className="no-print flex min-w-0 flex-1 flex-col">
+          {page === 'plan' && (
+            <SchoolBar
               bookings={siteBookings}
               date={date}
-              blocks={doc.blocks}
-              activities={activities}
-              venueNames={venueNames}
-              selection={selection}
-              highlightIds={highlightIds}
-              dayStartMin={prefs.dayStartMin}
-              dayEndMin={prefs.dayEndMin}
-              zoom={prefs.zoom}
-              dark={prefs.theme === 'dark'}
-              showDetail={prefs.showBlockDetail}
-              showTimes={prefs.showBlockTimes}
-              onSelect={handleSelect}
-              onClearSelection={handleClearSelection}
-              onOpenBooking={(id) => {
-                useStore.getState().setActiveBooking(id)
-                useStore.getState().setPage('plan')
-              }}
-              onNewBooking={() => {
-                const id = useStore.getState().addBooking({ startDate: date })
-                const created = useStore.getState().doc.bookings.find((b) => b.id === id)
-                if (created) setEditingBooking(created)
-              }}
-              onDateChange={(next) => useStore.getState().setActiveDate(next)}
+              activeBookingId={booking ? booking.id : null}
+              onOpen={(id) => useStore.getState().setActiveBooking(id)}
+              onAdd={() => openNewSchool(date)}
             />
           )}
 
-          {page === 'plan' &&
-            (booking ? (
-              <BookingView
-                booking={booking}
+          <div className="flex min-h-0 flex-1">
+            {page === 'staff' && (
+              <StaffPage site={doc.site} activities={activityList} staff={staffList} />
+            )}
+
+            {page === 'activities' && (
+              <ActivitiesPage
+                site={doc.site}
+                activities={activityList}
+                venues={venueList}
+                dark={prefs.theme === 'dark'}
+              />
+            )}
+
+            {page === 'venues' && (
+              <VenuesPage site={doc.site} venues={venueList} activities={activityList} />
+            )}
+
+            {page === 'site' && (
+              <WeekView
+                bookings={siteBookings}
                 date={date}
                 blocks={doc.blocks}
                 activities={activities}
@@ -437,81 +466,111 @@ export default function App() {
                 dark={prefs.theme === 'dark'}
                 showDetail={prefs.showBlockDetail}
                 showTimes={prefs.showBlockTimes}
-                mode={prefs.planMode}
-                onMode={(planMode) => useStore.getState().setPrefs({ planMode })}
                 onSelect={handleSelect}
                 onClearSelection={handleClearSelection}
+                onOpenBooking={(id) => {
+                  useStore.getState().setActiveBooking(id)
+                  useStore.getState().setPage('plan')
+                }}
+                onNewBooking={() => openNewSchool(date)}
                 onDateChange={(next) => useStore.getState().setActiveDate(next)}
-                onApplyTemplate={(templateId) =>
-                  useStore.getState().applyDayTemplate(templateId, booking.id, date)
-                }
-                onOpenRotation={() => setRotationOpen(true)}
-                onClearDay={() => {
-                  if (confirm(`Clear everything scheduled for ${booking.schoolName} on this day?`)) {
-                    useStore.getState().clearDay(booking.id, date)
-                  }
-                }}
-                onEditBooking={() => setEditingBooking(booking)}
-                onEmptyDoubleClick={(groupIndex, startMin) => {
-                  const group = booking.groups[groupIndex]
-                  if (!group) return
-                  const id = useStore.getState().addBlock({
-                    bookingId: booking.id,
-                    date,
-                    startMin,
-                    endMin: startMin + 90,
-                    groupIds: [group.id],
-                    kind: 'custom',
-                    title: 'New block',
-                    delivery: 'staff',
-                  })
-                  useStore.getState().select([id])
-                }}
               />
-            ) : (
-              <EmptyState
-                title={
-                  sync.status === 'loading'
-                    ? 'Loading the plan…'
-                    : siteBookings.length === 0
-                      ? `No schools at ${siteName} yet`
-                      : 'No school selected'
-                }
-                body={
-                  sync.status === 'loading'
-                    ? 'Reading the shared plan from the database.'
-                    : 'Add a school to start building its itinerary, or load the sample week to see how it all works.'
-                }
-                action={
-                  sync.status === 'loading' ? undefined : (
-                    <div className="flex gap-2">
-                      <Button
-                        variant="primary"
-                        onClick={() => {
-                          const id = useStore.getState().addBooking({ startDate: date })
-                          const created = useStore.getState().doc.bookings.find((b) => b.id === id)
-                          if (created) setEditingBooking(created)
-                        }}
-                      >
-                        Add a school
-                      </Button>
-                      <Button onClick={() => void loadSample()}>Load the sample week</Button>
-                    </div>
-                  )
-                }
-              />
-            ))}
+            )}
 
-          {showsGrid && selectedBlocks.length > 0 && (
-            <Inspector
-              blocks={selectedBlocks}
-              booking={doc.bookings.find((b) => b.id === selectedBlocks[0].bookingId)}
-              activities={activities}
-              venues={venueList}
-              site={doc.site}
-              onClose={handleClearSelection}
-            />
-          )}
+            {page === 'plan' &&
+              (booking ? (
+                <BookingView
+                  booking={booking}
+                  date={date}
+                  blocks={doc.blocks}
+                  activities={activities}
+                  venueNames={venueNames}
+                  selection={selection}
+                  highlightIds={highlightIds}
+                  dayStartMin={prefs.dayStartMin}
+                  dayEndMin={prefs.dayEndMin}
+                  zoom={prefs.zoom}
+                  dark={prefs.theme === 'dark'}
+                  showDetail={prefs.showBlockDetail}
+                  showTimes={prefs.showBlockTimes}
+                  mode={prefs.planMode}
+                  onMode={(planMode) => useStore.getState().setPrefs({ planMode })}
+                  onSelect={handleSelect}
+                  onClearSelection={handleClearSelection}
+                  onDateChange={(next) => useStore.getState().setActiveDate(next)}
+                  onApplyTemplate={(templateId) => {
+                    useStore.getState().applyDayTemplate(templateId, booking.id, date)
+                    const name = DAY_TEMPLATES.find((t) => t.id === templateId)?.name ?? 'Template'
+                    setToast(`${name} laid out on ${weekdayShort(date)} ${Number(date.slice(8))}.`, true)
+                  }}
+                  onOpenRotation={() => setRotationOpen(true)}
+                  onClearDay={() => {
+                    useStore.getState().clearDay(booking.id, date)
+                    setToast(`${weekdayShort(date)} ${Number(date.slice(8))} cleared.`, true)
+                  }}
+                  onEditBooking={() => setEditingBooking({ booking, isNew: false })}
+                  onDeleteBooking={() => deleteSchool(booking)}
+                  onExportSpreadsheet={exportSchoolExcel}
+                  onAddSchool={openNewSchool}
+                  onEmptyDoubleClick={(groupIndex, startMin) => {
+                    const group = booking.groups[groupIndex]
+                    if (!group) return
+                    const id = useStore.getState().addBlock({
+                      bookingId: booking.id,
+                      date,
+                      startMin,
+                      endMin: startMin + 90,
+                      groupIds: [group.id],
+                      kind: 'custom',
+                      title: 'New block',
+                      delivery: 'staff',
+                    })
+                    useStore.getState().select([id])
+                  }}
+                />
+              ) : (
+                <EmptyState
+                  title={
+                    sync.status === 'loading'
+                      ? 'Loading the plan…'
+                      : siteBookings.length === 0
+                        ? `No schools at ${siteName} yet`
+                        : 'Pick a school to plan'
+                  }
+                  body={
+                    sync.status === 'loading'
+                      ? 'Reading the shared plan from the database.'
+                      : siteBookings.length === 0
+                        ? 'Add a school to start building its itinerary, or load the sample week to see how it all works.'
+                        : 'Choose one of this week’s schools above, find one in another week, or add a new one.'
+                  }
+                  action={
+                    sync.status === 'loading' ? undefined : (
+                      <div className="flex gap-2">
+                        <Button variant="primary" onClick={() => openNewSchool(date)}>
+                          Add a school
+                        </Button>
+                        {siteBookings.length === 0 && (
+                          <Button onClick={() => void loadSample()}>Load the sample week</Button>
+                        )}
+                      </div>
+                    )
+                  }
+                />
+              ))}
+
+            {showsGrid && selectedBlocks.length > 0 && (
+              <Inspector
+                blocks={selectedBlocks}
+                booking={doc.bookings.find((b) => b.id === selectedBlocks[0].bookingId)}
+                activities={activities}
+                venues={venueList}
+                site={doc.site}
+                onClose={handleClearSelection}
+                onRemove={removeBlocks}
+              />
+            )}
+          </div>
         </main>
       </div>
 
@@ -551,14 +610,16 @@ export default function App() {
       {rotationOpen && booking && (
         <RotationDialog
           booking={booking}
-          date={date}
+          date={date >= booking.startDate && date <= booking.endDate ? date : booking.startDate}
           blocks={doc.blocks.filter((b) => b.bookingId === booking.id)}
           activities={paletteActivities}
           dayStartMin={prefs.dayStartMin}
           dayEndMin={prefs.dayEndMin}
-          onGenerate={(input) =>
+          onGenerate={(input) => {
             useStore.getState().generateRotation({ bookingId: booking.id, ...input })
-          }
+            const placed = useStore.getState().highlightIds.length
+            setToast(`${placed} session${placed === 1 ? '' : 's'} filled in.`, true)
+          }}
           onAddToList={(ids) => {
             useStore.getState().pickActivities(ids)
             setToast(
@@ -582,6 +643,7 @@ export default function App() {
             const sessions = result.bookings.reduce((total, entry) => total + entry.blocks.length, 0)
             setToast(
               `Imported ${result.bookings.length} school${result.bookings.length === 1 ? '' : 's'} and ${sessions} sessions.`,
+              true,
             )
           }}
           onClose={() => setImportOpen(false)}
@@ -590,21 +652,67 @@ export default function App() {
 
       {editingBooking && (
         <BookingDialog
-          booking={editingBooking}
-          onSave={(patch) => useStore.getState().updateBooking(editingBooking.id, patch)}
-          onDelete={() => useStore.getState().removeBooking(editingBooking.id)}
+          key={editingBooking.booking.id}
+          booking={editingBooking.booking}
+          isNew={editingBooking.isNew}
+          blocks={doc.blocks.filter((b) => b.bookingId === editingBooking.booking.id)}
+          onSave={(next) => {
+            if (editingBooking.isNew) {
+              useStore.getState().addBooking(next)
+              setToast(`${next.schoolName} added — pick a day and start planning.`)
+            } else {
+              useStore.getState().saveBooking(next.id, next)
+            }
+          }}
+          onDelete={() => deleteSchool(editingBooking.booking)}
           onClose={() => setEditingBooking(null)}
         />
       )}
 
       {toast && (
         <div
+          key={toast.key}
           role="status"
-          className="no-print fixed bottom-4 left-1/2 z-[300] -translate-x-1/2 rounded-lg border border-[var(--line)] bg-[var(--surface)] px-3 py-2 text-[12.5px] shadow-[var(--shadow-lg)]"
+          className="no-print fixed bottom-4 left-1/2 z-[300] flex max-w-[calc(100vw-32px)] -translate-x-1/2 items-center gap-3 rounded-lg border border-[var(--line)] bg-[var(--surface)] py-2 pr-2 pl-3 text-[12.5px] shadow-[var(--shadow-lg)]"
         >
-          {toast}
+          <span>{toast.message}</span>
+          {toast.undo && (
+            <Button
+              size="sm"
+              variant="ghost"
+              className="text-[var(--brand)]"
+              onClick={() => {
+                useStore.getState().undo()
+                setToastState(null)
+              }}
+            >
+              Undo
+            </Button>
+          )}
         </div>
       )}
     </div>
   )
+}
+
+/**
+ * The earliest start in a group's day with room for `duration` minutes.
+ *
+ * Inside a day that already has meals and logistics, that's the first gap long
+ * enough; failing that, straight after the last thing on the day. An empty day
+ * starts at nine, or the first hour shown if that's later.
+ */
+function firstFreeStart(
+  blocks: Block[],
+  duration: number,
+  hours: { dayStart: number; dayEnd: number },
+): number | null {
+  if (blocks.length === 0) {
+    const start = Math.max(hours.dayStart, 9 * 60)
+    return start + duration <= hours.dayEnd ? start : hours.dayStart
+  }
+  const gap = suggestSlots(blocks, { ...hours, minLength: duration, maxLength: duration })[0]
+  if (gap) return gap.startMin
+  const last = Math.max(...blocks.map((b) => b.endMin))
+  return last + duration <= hours.dayEnd ? last : null
 }

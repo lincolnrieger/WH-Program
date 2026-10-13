@@ -129,19 +129,21 @@ export function WeekView({
 
         {/* Only the week in view: the list is a way to single out one of the
             schools on screen, not a directory of every booking in the term. */}
-        <Select
-          value={focused}
-          onChange={(event) => setFocusId(event.target.value)}
-          aria-label="Which schools to show"
-          className="h-7 w-auto min-w-[150px] text-[12px]"
-        >
-          <option value="all">All schools this week</option>
-          {inWeek.map((booking) => (
-            <option key={booking.id} value={booking.id}>
-              {booking.schoolName}
-            </option>
-          ))}
-        </Select>
+        <div className="w-[220px] shrink-0">
+          <Select
+            value={focused}
+            onChange={(event) => setFocusId(event.target.value)}
+            aria-label="Which schools to show"
+            className="h-7 text-[12px]"
+          >
+            <option value="all">All schools this week</option>
+            {inWeek.map((booking) => (
+              <option key={booking.id} value={booking.id}>
+                {booking.schoolName}
+              </option>
+            ))}
+          </Select>
+        </div>
 
         <span className="ml-auto text-[11px] text-[var(--ink-faint)]">
           {mode === 'day'
@@ -155,8 +157,8 @@ export function WeekView({
           title="Nobody on site"
           body={
             mode === 'day'
-              ? `No school is booked in for ${formatDate(date)}. Pick another day, or add a booking.`
-              : `No school is booked in for ${term.label}. Pick another week, or add a booking.`
+              ? `No school is booked in for ${formatDate(date)}. Pick another day, or add a school.`
+              : `No school is booked in for ${term.label}. Pick another week, or add a school.`
           }
           action={
             <Button variant="primary" onClick={onNewBooking}>
@@ -293,7 +295,7 @@ function SiteWeek({
         </colgroup>
         <thead className="sticky top-0 z-20 bg-[var(--surface)]">
           <tr>
-            <th className="border-b border-[var(--line)] px-2 py-1.5 text-left text-[10.5px] font-semibold tracking-wide text-[var(--ink-faint)] uppercase">
+            <th className="border-b border-[var(--line)] px-2 py-1.5 text-left text-[10.5px] font-semibold text-[var(--ink-soft)]">
               School
             </th>
             {days.map((day) => (

@@ -149,7 +149,7 @@ This is the setup to use. Cloudflare rebuilds and redeploys every time you push
 The first build takes two or three minutes. When it finishes you get a URL like
 `https://wh-program.YOUR-SUBDOMAIN.workers.dev`. That's the live app.
 
-Open it and use **Program → Load the sample week** to check the database is
+Open it and use **File → Load the sample week** to check the database is
 wired up. If the schools appear, and are still there when you open the same URL
 on your phone, everything is working.
 
@@ -358,7 +358,7 @@ D1 keeps point-in-time history. To take one yourself:
 npx wrangler d1 export wh-program --remote --output backup.sql
 ```
 
-Worth doing before anything irreversible — **Program → Start fresh** in
+Worth doing before anything irreversible — **File → Start fresh** in
 particular, which empties the plan for everyone.
 
 ---

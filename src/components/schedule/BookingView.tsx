@@ -1,12 +1,13 @@
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import type { Activity, Block, Booking } from '@/types'
+import { PACKAGE_LABELS } from '@/types'
 import type { PlanMode } from '@/store/persist'
 import { DAY_TEMPLATES } from '@/data/templates'
-import { bookingDates, bookingHeadline, bookingSubhead } from '@/lib/exportImport'
+import { bookingDates } from '@/lib/exportImport'
 import { formatDate, weekdayShort } from '@/lib/time'
 import { ScheduleGrid } from './ScheduleGrid'
 import { TimeAxis } from './TimeAxis'
-import { Button, cx } from '@/components/ui/primitives'
+import { Button, EmptyState, cx } from '@/components/ui/primitives'
 
 const HEADER_HEIGHT = 30
 const STAY_HEADER_HEIGHT = 52
@@ -15,18 +16,19 @@ const STAY_GROUP_HEIGHT = 20
 /**
  * The main editing surface for one school.
  *
- * **Day** is a column per group for the day you're on — the close-up you build
- * in. **Whole stay** lays every day of the visit out side by side against the
- * same time axis, which is the view you want when you're checking a group
- * doesn't do the tube slide twice, or dragging Wednesday's spare session back
- * to Tuesday.
+ * **One day** is a column per group for the day picked in the week bar — the
+ * close-up you build in. **Whole stay** lays every day of the visit out side
+ * by side against the same time axis, which is the view you want when you're
+ * checking a group doesn't do the tube slide twice, or dragging Wednesday's
+ * spare session back to Tuesday.
  */
 export function BookingView({
   booking, date, blocks, activities, venueNames,
   selection, highlightIds, dayStartMin, dayEndMin, zoom, dark, showDetail, showTimes,
   mode, onMode,
   onSelect, onClearSelection, onDateChange, onApplyTemplate, onOpenRotation,
-  onClearDay, onEditBooking, onEmptyDoubleClick,
+  onClearDay, onEditBooking, onDeleteBooking, onExportSpreadsheet, onAddSchool,
+  onEmptyDoubleClick,
 }: {
   booking: Booking
   date: string
@@ -50,9 +52,13 @@ export function BookingView({
   onOpenRotation: () => void
   onClearDay: () => void
   onEditBooking: () => void
+  onDeleteBooking: () => void
+  onExportSpreadsheet: () => void
+  /** Starts a new school arriving on the given day. */
+  onAddSchool: (date: string) => void
   onEmptyDoubleClick: (groupIndex: number, startMin: number) => void
 }) {
-  const [templateOpen, setTemplateOpen] = useState(false)
+  const [menu, setMenu] = useState<'template' | 'more' | null>(null)
 
   const dates = useMemo(() => bookingDates(booking), [booking])
   const forBooking = useMemo(
@@ -65,14 +71,45 @@ export function BookingView({
   )
 
   const stay = mode === 'stay'
+  const dayIndex = dates.indexOf(date)
+  const onSite = dayIndex >= 0
+  const suggested = suggestTemplate(dayIndex, dates.length)
+
+  const details = [
+    booking.yearLevel,
+    booking.studentCount ? `${booking.studentCount} students` : '',
+    `${booking.groups.length} group${booking.groups.length === 1 ? '' : 's'}`,
+    booking.packageTier === 'custom' ? '' : PACKAGE_LABELS[booking.packageTier],
+    booking.building,
+  ].filter(Boolean)
 
   return (
     <section className="flex min-w-0 flex-1 flex-col overflow-hidden">
-      <header className="no-print flex shrink-0 flex-col gap-2 border-b border-[var(--line)] bg-[var(--surface)] px-3 py-2">
-        <div className="flex flex-wrap items-center gap-2">
-          <div className="flex items-center gap-0.5 rounded-lg bg-[var(--surface-sunk)] p-0.5">
+      <header className="no-print flex shrink-0 flex-wrap items-center gap-x-3 gap-y-2 border-b border-[var(--line)] bg-[var(--surface)] px-3 py-2">
+        <div className="min-w-0">
+          <h1 className="truncate text-[15px] leading-tight font-semibold text-[var(--ink)]">
+            {booking.schoolName || 'Unnamed school'}
+          </h1>
+          <p className="truncate text-[12px] leading-tight text-[var(--ink-soft)]">
+            {details.join(' · ')}
+            <button
+              type="button"
+              onClick={onEditBooking}
+              className="ml-2 font-medium text-[var(--brand)] underline-offset-2 hover:underline"
+            >
+              Edit details
+            </button>
+          </p>
+        </div>
+
+        <div className="ml-auto flex flex-wrap items-center gap-1.5">
+          <div
+            role="group"
+            aria-label="Show"
+            className="flex items-center gap-0.5 rounded-lg bg-[var(--surface-sunk)] p-0.5"
+          >
             {([
-              ['day', 'Day'],
+              ['day', 'One day'],
               ['stay', 'Whole stay'],
             ] as const).map(([value, label]) => (
               <button
@@ -92,91 +129,119 @@ export function BookingView({
             ))}
           </div>
 
-          <button
-            type="button"
-            onClick={onEditBooking}
-            className="min-w-0 rounded-md px-1.5 py-0.5 text-left transition-colors hover:bg-[var(--surface-sunk)]"
-          >
-            <span className="block truncate text-[14px] leading-tight font-semibold text-[var(--ink)]">
-              {bookingHeadline(booking)}
-            </span>
-            <span className="block truncate text-[11.5px] text-[var(--ink-soft)]">
-              {bookingSubhead(booking)}
-            </span>
-          </button>
-
-          <div className="ml-auto flex flex-wrap items-center gap-1.5">
+          {!stay && onSite && (
             <div className="relative">
-              <Button size="sm" onClick={() => setTemplateOpen((open) => !open)}>
+              <Button
+                size="sm"
+                onClick={() => setMenu((open) => (open === 'template' ? null : 'template'))}
+                aria-expanded={menu === 'template'}
+              >
                 Day template
                 <span aria-hidden className="text-[9px] opacity-60">
                   &#9662;
                 </span>
               </Button>
-              {templateOpen && (
-                <Dropdown onClose={() => setTemplateOpen(false)}>
+              {menu === 'template' && (
+                <Dropdown onClose={() => setMenu(null)}>
                   <p className="border-b border-[var(--line)] px-3 pt-1.5 pb-2 text-[11px] leading-snug text-[var(--ink-soft)]">
                     Lays the meals and logistics onto{' '}
                     <strong className="font-medium text-[var(--ink)]">{formatDate(date)}</strong> at
-                    the standard times, so only the activities are left to place.
+                    the standard times. Activities already placed stay put.
                   </p>
                   {DAY_TEMPLATES.map((template) => (
-                    <button
+                    <MenuItem
                       key={template.id}
-                      type="button"
+                      label={template.name}
+                      detail={template.description}
+                      badge={template.id === suggested ? 'Suggested' : undefined}
                       onClick={() => {
                         onApplyTemplate(template.id)
-                        setTemplateOpen(false)
+                        setMenu(null)
                       }}
-                      className="block w-full px-3 py-1.5 text-left transition-colors hover:bg-[var(--surface-sunk)]"
-                    >
-                      <span className="block text-[12.5px] font-medium text-[var(--ink)]">
-                        {template.name}
-                      </span>
-                      <span className="block text-[11px] leading-snug text-[var(--ink-faint)]">
-                        {template.description}
-                      </span>
-                    </button>
+                    />
                   ))}
                 </Dropdown>
               )}
             </div>
+          )}
 
-            <Button size="sm" variant="primary" onClick={onOpenRotation}>
-              Add activities
+          <Button size="sm" variant="primary" onClick={onOpenRotation}>
+            Add activities
+          </Button>
+
+          <div className="relative">
+            <Button
+              size="sm"
+              variant="ghost"
+              onClick={() => setMenu((open) => (open === 'more' ? null : 'more'))}
+              aria-expanded={menu === 'more'}
+              aria-label="More for this school"
+              title="More for this school"
+            >
+              More
+              <span aria-hidden className="text-[9px] opacity-60">
+                &#9662;
+              </span>
             </Button>
-
-            {!stay && (
-              <Button size="sm" variant="ghost" onClick={onClearDay}>
-                Clear day
-              </Button>
+            {menu === 'more' && (
+              <Dropdown onClose={() => setMenu(null)}>
+                <MenuItem
+                  label="Edit details"
+                  detail="Name, dates, groups and building."
+                  onClick={() => {
+                    setMenu(null)
+                    onEditBooking()
+                  }}
+                />
+                <MenuItem
+                  label="Save as a spreadsheet"
+                  detail="This school's itinerary as .xlsx."
+                  onClick={() => {
+                    setMenu(null)
+                    onExportSpreadsheet()
+                  }}
+                />
+                {!stay && onSite && (
+                  <MenuItem
+                    label={`Clear ${weekdayShort(date)} ${Number(date.slice(8))}`}
+                    detail="Removes everything on this day. Undo brings it back."
+                    disabled={dayBlocks.length === 0}
+                    onClick={() => {
+                      setMenu(null)
+                      onClearDay()
+                    }}
+                  />
+                )}
+                <div className="my-1 border-t border-[var(--line)]" />
+                <MenuItem
+                  label="Delete this school"
+                  detail={`And its ${forBooking.length} session${forBooking.length === 1 ? '' : 's'}. Undo brings it back.`}
+                  danger
+                  onClick={() => {
+                    setMenu(null)
+                    onDeleteBooking()
+                  }}
+                />
+              </Dropdown>
             )}
           </div>
         </div>
-
-        {!stay && (
-          <div className="flex flex-wrap gap-1">
-            {dates.map((option, index) => (
-              <button
-                key={option}
-                type="button"
-                onClick={() => onDateChange(option)}
-                className={cx(
-                  'rounded-md border px-2.5 py-1 text-[12px] font-medium transition-colors',
-                  option === date
-                    ? 'border-[var(--brand)] bg-[var(--brand)] text-[var(--brand-ink)]'
-                    : 'border-[var(--line)] bg-[var(--surface)] text-[var(--ink-soft)] hover:bg-[var(--surface-sunk)]',
-                )}
-              >
-                <span className="tnum">
-                  Day {index + 1} · {weekdayShort(option)}
-                </span>
-              </button>
-            ))}
-          </div>
-        )}
       </header>
 
+      {!stay && !onSite ? (
+        <EmptyState
+          title={`${booking.schoolName || 'This school'} isn’t on site on ${weekdayShort(date)} ${Number(date.slice(8))}`}
+          body={`Their stay is ${formatDate(booking.startDate)}${booking.endDate !== booking.startDate ? ` – ${formatDate(booking.endDate)}` : ''}, and no other school is here that day.`}
+          action={
+            <div className="flex gap-2">
+              <Button variant="primary" onClick={() => onDateChange(booking.startDate)}>
+                Go to their first day
+              </Button>
+              <Button onClick={() => onAddSchool(date)}>Add a school arriving that day</Button>
+            </div>
+          }
+        />
+      ) : (
       <div className="flex min-h-0 flex-1 overflow-auto">
         <TimeAxis
           dayStartMin={dayStartMin}
@@ -264,7 +329,15 @@ export function BookingView({
             })}
           </div>
         ) : (
-          <div className="min-w-0 flex-1">
+          <div className="relative min-w-0 flex-1">
+            {dayBlocks.length === 0 && (
+              <EmptyDay
+                dayNumber={dayIndex + 1}
+                date={date}
+                suggested={suggested}
+                onApplyTemplate={onApplyTemplate}
+              />
+            )}
             <ScheduleGrid
               gridId={`booking:${booking.id}:${date}`}
               booking={booking}
@@ -287,11 +360,121 @@ export function BookingView({
           </div>
         )}
       </div>
+      )}
     </section>
   )
 }
 
+/**
+ * The day template that fits where a day falls in the stay: arrive on the
+ * first, leave on the last, a full program in between, and a day visit when
+ * the stay is one day long.
+ */
+function suggestTemplate(dayIndex: number, days: number): string {
+  if (days === 1) return 'day-visit'
+  if (dayIndex === 0) return 'arrival-day'
+  if (dayIndex === days - 1) return 'departure-day'
+  return 'full-day'
+}
+
+/**
+ * What an empty day says: the two ways to start one, with the template that
+ * fits this day of the stay offered first.
+ */
+function EmptyDay({
+  dayNumber,
+  date,
+  suggested,
+  onApplyTemplate,
+}: {
+  dayNumber: number
+  date: string
+  suggested: string
+  onApplyTemplate: (templateId: string) => void
+}) {
+  const first = DAY_TEMPLATES.find((template) => template.id === suggested) ?? DAY_TEMPLATES[0]
+  const others = DAY_TEMPLATES.filter((template) => template.id !== first.id)
+
+  return (
+    <div className="pointer-events-none absolute inset-x-0 top-16 z-20 flex justify-center px-4">
+      <div className="pointer-events-auto w-full max-w-[440px] rounded-xl border border-[var(--line)] bg-[var(--surface)] p-4 shadow-[var(--shadow-md)]">
+        <p className="text-[14px] font-semibold text-[var(--ink)]">
+          Nothing planned for Day {dayNumber} yet
+        </p>
+        <p className="mt-0.5 text-[12.5px] text-[var(--ink-soft)]">
+          Start {formatDate(date)} with the meals and logistics at their usual times, then drag
+          activities into the gaps.
+        </p>
+        <div className="mt-3 flex flex-wrap items-center gap-1.5">
+          <Button variant="primary" onClick={() => onApplyTemplate(first.id)}>
+            Use {first.name.toLowerCase()}
+          </Button>
+          {others.map((template) => (
+            <Button key={template.id} size="sm" variant="ghost" onClick={() => onApplyTemplate(template.id)}>
+              {template.name}
+            </Button>
+          ))}
+        </div>
+        <p className="mt-3 text-[11.5px] text-[var(--ink-faint)]">
+          Or drag straight from the activity list. Double-click an empty spot for a blank block.
+        </p>
+      </div>
+    </div>
+  )
+}
+
+function MenuItem({
+  label,
+  detail,
+  badge,
+  danger,
+  disabled,
+  onClick,
+}: {
+  label: string
+  detail: string
+  badge?: string
+  danger?: boolean
+  disabled?: boolean
+  onClick: () => void
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      disabled={disabled}
+      className="block w-full px-3 py-1.5 text-left transition-colors hover:bg-[var(--surface-sunk)] disabled:pointer-events-none disabled:opacity-45"
+    >
+      <span
+        className={cx(
+          'flex items-center gap-2 text-[12.5px] font-medium',
+          danger ? 'text-[var(--danger)]' : 'text-[var(--ink)]',
+        )}
+      >
+        {label}
+        {badge && (
+          <span className="rounded-full bg-[var(--brand-tint)] px-1.5 py-px text-[10px] font-semibold text-[var(--brand)]">
+            {badge}
+          </span>
+        )}
+      </span>
+      <span className="block text-[11px] leading-snug text-[var(--ink-faint)]">{detail}</span>
+    </button>
+  )
+}
+
 function Dropdown({ children, onClose }: { children: React.ReactNode; onClose: () => void }) {
+  const closeRef = useRef(onClose)
+  closeRef.current = onClose
+
+  useEffect(() => {
+    function onKey(event: KeyboardEvent) {
+      if (event.key === 'Escape') closeRef.current()
+    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [])
+
   return (
     <>
       <div className="fixed inset-0 z-40" onClick={onClose} aria-hidden />

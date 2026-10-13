@@ -1,4 +1,4 @@
-import { useMemo, useState, type PointerEvent as ReactPointerEvent } from 'react'
+import { useMemo, type PointerEvent as ReactPointerEvent } from 'react'
 import type { Activity, Site } from '@/types'
 import { ROUTINES } from '@/data/activities'
 import { blockPalette } from '@/lib/colour'
@@ -28,16 +28,15 @@ export interface ActivityPaletteProps {
  * drops it into the first free slot of the selected day instead, so the app is
  * still usable without a mouse.
  *
- * Two things sit above the full catalogue. A box for typing an activity that
- * isn't in the catalogue yet, which adds it and sets it aside; and the set-aside
- * list itself, which is what "Add to list" in the rotation dialog fills — pick
- * the activities for a school once, then drag them where you want them.
+ * One box does both finding and adding. Typing narrows the list, and a name
+ * the catalogue doesn't have yet is offered as a new activity right there —
+ * two boxes side by side for "search" and "add" had people typing into the
+ * wrong one.
  */
 export function ActivityPalette({
   activities, picked, site, dark, search, onSearch, onQuickAdd, canAdd,
   onAddCustom, onUnpick, onClearPicked,
 }: ActivityPaletteProps) {
-  const [draft, setDraft] = useState('')
   const query = search.trim().toLowerCase()
 
   const filtered = useMemo(() => {
@@ -56,42 +55,64 @@ export function ActivityPalette({
     [query],
   )
 
-  function submitCustom() {
-    const name = draft.trim()
-    if (!name) return
-    onAddCustom(name)
-    setDraft('')
+  // Offer to add what was typed only when nothing is already called that.
+  const canCreate =
+    query.length > 0 && !activities.some((activity) => activity.name.toLowerCase() === query)
+
+  function create() {
+    if (!canCreate) return
+    onAddCustom(search.trim())
+    onSearch('')
   }
 
   return (
     <div className="flex h-full min-h-0 flex-col">
       <div className="shrink-0 space-y-1.5 border-b border-[var(--line)] px-3 py-2.5">
-        <div className="flex gap-1.5">
-          <Input
-            value={draft}
-            onChange={(event) => setDraft(event.target.value)}
-            onKeyDown={(event) => {
-              if (event.key === 'Enter') {
-                event.preventDefault()
-                submitCustom()
-              }
-            }}
-            placeholder="Add a custom activity…"
-            aria-label="Add a custom activity"
-          />
-          <Button size="md" variant="primary" disabled={!draft.trim()} onClick={submitCustom}>
-            Add
-          </Button>
-        </div>
         <Input
+          type="search"
           value={search}
           onChange={(event) => onSearch(event.target.value)}
-          placeholder="Search activities…"
-          aria-label="Search activities"
+          onKeyDown={(event) => {
+            if (event.key === 'Enter') {
+              event.preventDefault()
+              create()
+            }
+            if (event.key === 'Escape' && search) {
+              event.stopPropagation()
+              onSearch('')
+            }
+          }}
+          placeholder="Find or add an activity…"
+          aria-label="Find or add an activity"
         />
+        <p className="text-[11px] leading-snug text-[var(--ink-faint)]">
+          {canAdd
+            ? 'Drag onto the grid, or click to drop into the next free slot.'
+            : 'Open a school first, then drag activities onto its days.'}
+        </p>
       </div>
 
       <div className="min-h-0 flex-1 overflow-y-auto pb-4">
+        {canCreate && (
+          <div className="px-2 pt-2">
+            <button
+              type="button"
+              onClick={create}
+              className="flex w-full items-center gap-2 rounded-md border border-dashed border-[var(--line-strong)] px-2.5 py-1.5 text-left text-[12px] transition-colors hover:bg-[var(--surface-sunk)]"
+            >
+              <span aria-hidden className="text-[14px] leading-none text-[var(--brand)]">+</span>
+              <span className="min-w-0 flex-1">
+                <span className="block truncate font-semibold text-[var(--ink)]">
+                  Add “{search.trim()}”
+                </span>
+                <span className="block text-[10.5px] text-[var(--ink-faint)]">
+                  New activity · press Enter
+                </span>
+              </span>
+            </button>
+          </div>
+        )}
+
         {picked.length > 0 && (
           <>
             <SectionTitle
@@ -101,7 +122,7 @@ export function ActivityPalette({
                 </Button>
               }
             >
-              Picked ({picked.length})
+              Picked for this school ({picked.length})
             </SectionTitle>
             <div className="flex flex-col gap-1 px-2">
               {picked.map((activity) => (
@@ -126,13 +147,10 @@ export function ActivityPalette({
                 />
               ))}
             </div>
-            <p className="px-3 pt-1.5 text-[10.5px] leading-snug text-[var(--ink-faint)]">
-              Drag these onto the grid, or click one to drop it in the next free slot.
-            </p>
           </>
         )}
 
-        <SectionTitle>All activities ({filtered.length})</SectionTitle>
+        <SectionTitle>{query ? `Matching activities (${filtered.length})` : `Activities (${filtered.length})`}</SectionTitle>
         <div className="flex flex-col gap-1 px-2">
           {filtered.map((activity) => (
             <PaletteItem
@@ -155,13 +173,13 @@ export function ActivityPalette({
             />
           ))}
           {filtered.length === 0 && (
-            <p className="px-1 py-3 text-[12px] text-[var(--ink-faint)]">
-              No activities match “{search}”.
+            <p className="px-1 py-2 text-[12px] text-[var(--ink-faint)]">
+              Nothing in the catalogue is called “{search.trim()}”.
             </p>
           )}
         </div>
 
-        <SectionTitle>Meals &amp; logistics</SectionTitle>
+        {routines.length > 0 && <SectionTitle>Meals &amp; logistics</SectionTitle>}
         <div className="flex flex-col gap-1 px-2">
           {routines.map((routine) => (
             <PaletteItem

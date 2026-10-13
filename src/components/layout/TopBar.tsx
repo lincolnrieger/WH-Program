@@ -8,12 +8,17 @@ import { ViewMenu } from './ViewMenu'
 import { SyncBadge } from './SyncBadge'
 import { Button, IconButton, cx } from '@/components/ui/primitives'
 
-const PAGES: { id: Page; label: string }[] = [
-  { id: 'plan', label: 'Plan' },
+/** Where the planning happens, every day. */
+const WORK_PAGES: { id: Page; label: string }[] = [
+  { id: 'plan', label: 'Plan a school' },
   { id: 'site', label: 'Whole site' },
-  { id: 'staff', label: 'Staff' },
+]
+
+/** The reference lists the planning draws on — visited now and then. */
+const REFERENCE_PAGES: { id: Page; label: string }[] = [
   { id: 'activities', label: 'Activities' },
   { id: 'venues', label: 'Venues' },
+  { id: 'staff', label: 'Staff' },
 ]
 
 export function TopBar({
@@ -87,23 +92,46 @@ export function TopBar({
         </div>
       </div>
 
-      <nav aria-label="Sections" className="flex items-center gap-0.5 rounded-lg bg-[var(--surface-sunk)] p-0.5">
-        {PAGES.map((item) => (
-          <button
-            key={item.id}
-            type="button"
-            onClick={() => onPage(item.id)}
-            aria-current={page === item.id ? 'page' : undefined}
-            className={cx(
-              'rounded-md px-2.5 py-1 text-[12.5px] font-medium whitespace-nowrap transition-colors',
-              page === item.id
-                ? 'bg-[var(--surface)] text-[var(--ink)] shadow-[var(--shadow-sm)]'
-                : 'text-[var(--ink-soft)] hover:text-[var(--ink)]',
-            )}
-          >
-            {item.label}
-          </button>
-        ))}
+      <nav aria-label="Sections" className="flex items-center gap-3">
+        <div className="flex items-center gap-0.5 rounded-lg bg-[var(--surface-sunk)] p-0.5">
+          {WORK_PAGES.map((item) => (
+            <button
+              key={item.id}
+              type="button"
+              onClick={() => onPage(item.id)}
+              aria-current={page === item.id ? 'page' : undefined}
+              className={cx(
+                'rounded-md px-2.5 py-1 text-[12.5px] font-medium whitespace-nowrap transition-colors',
+                page === item.id
+                  ? 'bg-[var(--surface)] text-[var(--ink)] shadow-[var(--shadow-sm)]'
+                  : 'text-[var(--ink-soft)] hover:text-[var(--ink)]',
+              )}
+            >
+              {item.label}
+            </button>
+          ))}
+        </div>
+
+        <span aria-hidden className="h-5 w-px bg-[var(--line)]" />
+
+        <div className="flex items-center gap-0.5">
+          {REFERENCE_PAGES.map((item) => (
+            <button
+              key={item.id}
+              type="button"
+              onClick={() => onPage(item.id)}
+              aria-current={page === item.id ? 'page' : undefined}
+              className={cx(
+                'rounded-md px-2 py-1 text-[12.5px] whitespace-nowrap transition-colors',
+                page === item.id
+                  ? 'bg-[var(--brand-tint)] font-medium text-[var(--brand)]'
+                  : 'text-[var(--ink-soft)] hover:bg-[var(--surface-sunk)] hover:text-[var(--ink)]',
+              )}
+            >
+              {item.label}
+            </button>
+          ))}
+        </div>
       </nav>
 
       <div className="ml-auto flex items-center gap-1.5">
@@ -119,25 +147,17 @@ export function TopBar({
           </IconButton>
         </div>
 
-        {showsGrid && <ViewMenu prefs={prefs} onChange={onPrefs} />}
-
-        <IconButton
-          label={prefs.theme === 'dark' ? 'Switch to light theme' : 'Switch to dark theme'}
-          onClick={() => onPrefs({ theme: prefs.theme === 'dark' ? 'light' : 'dark' })}
-          className="border border-[var(--line)]"
-        >
-          {prefs.theme === 'dark' ? '☀' : '☽'}
-        </IconButton>
+        <ViewMenu prefs={prefs} onChange={onPrefs} showsGrid={showsGrid} />
 
         {showsGrid && (
-          <Button size="sm" onClick={onPrint}>
+          <Button size="sm" onClick={onPrint} title="Print or save as PDF (Ctrl+P)">
             Print / PDF
           </Button>
         )}
 
         <div className="relative">
           <Button size="sm" onClick={() => setMenuOpen((open) => !open)} aria-expanded={menuOpen}>
-            Program
+            File
             <span aria-hidden className="text-[9px] opacity-60">
               &#9662;
             </span>
@@ -196,13 +216,11 @@ export function TopBar({
                   onClick={() => { setMenuOpen(false); onStartFresh() }}
                 />
 
-                {/* The plan is shared now. Saying where it lives is the answer
-                    to "will the others see this?", which is the first thing
-                    anyone asks of an app like this. */}
+                {/* The plan is shared. Saying so answers "will the others see
+                    this?", the first thing anyone asks of an app like this. */}
                 <p className="mt-1 border-t border-[var(--line)] px-3 pt-2 pb-1 text-[11px] leading-snug text-[var(--ink-soft)]">
-                  <span className="font-medium text-[var(--ink)]">Saved for everyone.</span> Both
-                  sites share one plan, kept in the database behind this site and saved as you
-                  type. Open it on any computer and you're looking at the same thing.
+                  <span className="font-medium text-[var(--ink)]">There’s nothing to save.</span>{' '}
+                  Every change is stored as you make it, and everyone sees the same plan.
                 </p>
               </div>
             </>
@@ -215,7 +233,7 @@ export function TopBar({
 
 function MenuHeading({ children }: { children: React.ReactNode }) {
   return (
-    <p className="px-3 pt-2 pb-0.5 text-[10px] font-semibold tracking-wide text-[var(--ink-faint)] uppercase">
+    <p className="px-3 pt-2 pb-0.5 text-[10px] font-semibold text-[var(--ink-soft)]">
       {children}
     </p>
   )

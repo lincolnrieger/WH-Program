@@ -150,7 +150,7 @@ export function ImportDialog({
           <>
             <div className="grid grid-cols-2 gap-3">
               <label className="block">
-                <span className="mb-1 block text-[11px] font-medium tracking-wide text-[var(--ink-faint)] uppercase">
+                <span className="mb-1 block text-[11px] font-medium text-[var(--ink-soft)]">
                   Import as
                 </span>
                 <Select
@@ -300,7 +300,7 @@ export function ImportDialog({
 function Section({ label, children }: { label: string; children: React.ReactNode }) {
   return (
     <div>
-      <span className="mb-1 block text-[10.5px] font-semibold tracking-wide text-[var(--ink-faint)] uppercase">
+      <span className="mb-1 block text-[10.5px] font-semibold text-[var(--ink-soft)]">
         {label}
       </span>
       {children}

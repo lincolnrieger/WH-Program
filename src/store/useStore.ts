@@ -13,7 +13,7 @@ import { DAY_TEMPLATES, instantiateTemplate } from '@/data/templates'
 import { buildRotation, type RotationSlot } from '@/lib/rotation'
 import { colourFromString } from '@/lib/colour'
 import { uid } from '@/lib/id'
-import { addDays, dateRange } from '@/lib/time'
+import { addDays, dateRange, daysBetween } from '@/lib/time'
 import type { RemoteState } from '@/lib/api'
 import { resetAll } from '@/lib/api'
 import {
@@ -22,6 +22,9 @@ import {
 import { clearQueue, diffDocuments, documentToOps, enqueue, flushNow, refresh } from './sync'
 
 const HISTORY_LIMIT = 60
+
+/** Edits to the same field closer together than this undo as one. */
+const COALESCE_MS = 1500
 
 /** Top-level destinations in the app. */
 export type Page = 'plan' | 'site' | 'staff' | 'activities' | 'venues'
@@ -71,6 +74,12 @@ interface State {
   // ── bookings ──
   addBooking: (partial?: Partial<Booking>) => string
   updateBooking: (id: string, patch: Partial<Booking>) => void
+  /**
+   * Saves the booking dialog. Unlike a plain update, the sessions follow:
+   * moving the dates moves them, and anything left outside the new stay or on
+   * a group that no longer exists goes with it.
+   */
+  saveBooking: (id: string, next: Booking) => void
   removeBooking: (id: string) => void
   addGroup: (bookingId: string) => void
   updateGroup: (bookingId: string, groupId: string, patch: Partial<Group>) => void
@@ -79,8 +88,14 @@ interface State {
   // ── blocks ──
   addBlock: (block: Omit<Block, 'id'>) => string
   addBlocks: (blocks: Omit<Block, 'id'>[]) => string[]
-  updateBlock: (id: string, patch: Partial<Block>) => void
+  /**
+   * `coalesce` names a stream of edits — typing into one field, say — that
+   * should come off with a single undo rather than one per keystroke.
+   */
+  updateBlock: (id: string, patch: Partial<Block>, coalesce?: string) => void
   updateBlocks: (ids: string[], patch: Partial<Block>) => void
+  /** A different patch per block, as one undoable step. */
+  updateEach: (ids: string[], patch: (block: Block) => Partial<Block> | null) => void
   removeBlocks: (ids: string[]) => void
   duplicateBlocks: (ids: string[]) => void
   moveBlock: (id: string, next: { startMin: number; endMin: number; groupIds?: string[]; date?: string }) => void
@@ -177,14 +192,27 @@ export const useStore = create<State>((set, get) => {
    * whole documents, but only the bookings and sessions that actually changed
    * go over the wire.
    */
-  function commit(mutate: (doc: ProgramDocument) => ProgramDocument): void {
+  let lastCoalesce: { key: string; at: number } | null = null
+
+  function commit(mutate: (doc: ProgramDocument) => ProgramDocument, coalesce?: string): void {
     const { doc, past } = get()
     const next = stamp(mutate(doc))
     saveDocument(next)
     enqueue(diffDocuments(doc, next))
+
+    // A run of keystrokes in one field keeps the snapshot from before the
+    // first of them, so undo takes the whole word back rather than a letter.
+    const now = Date.now()
+    const continues =
+      coalesce !== undefined &&
+      lastCoalesce?.key === coalesce &&
+      now - lastCoalesce.at < COALESCE_MS &&
+      past.length > 0
+    lastCoalesce = coalesce === undefined ? null : { key: coalesce, at: now }
+
     set({
       doc: next,
-      past: [...past, doc].slice(-HISTORY_LIMIT),
+      past: continues ? past : [...past, doc].slice(-HISTORY_LIMIT),
       future: [],
     })
   }
@@ -302,6 +330,7 @@ export const useStore = create<State>((set, get) => {
       const { past, doc, future } = get()
       const previous = past[past.length - 1]
       if (!previous) return
+      lastCoalesce = null
       saveDocument(previous)
       enqueue(diffDocuments(doc, previous))
       set({
@@ -315,6 +344,7 @@ export const useStore = create<State>((set, get) => {
       const { past, doc, future } = get()
       const next = future[0]
       if (!next) return
+      lastCoalesce = null
       saveDocument(next)
       enqueue(diffDocuments(doc, next))
       set({
@@ -325,23 +355,8 @@ export const useStore = create<State>((set, get) => {
     },
 
     addBooking: (partial) => {
-      const id = uid('bkg')
-      const today = get().activeDate ?? new Date().toISOString().slice(0, 10)
-      const booking: Booking = {
-        id,
-        site: get().doc.site,
-        schoolName: 'New school',
-        yearLevel: '',
-        packageTier: 'gold',
-        building: '',
-        startDate: today,
-        endDate: addDays(today, 2),
-        groups: [
-          { id: uid('grp'), name: 'Group 1' },
-          { id: uid('grp'), name: 'Group 2' },
-        ],
-        ...partial,
-      }
+      const booking = newBookingDraft(get().doc.site, get().activeDate, partial)
+      const id = booking.id
       commit((doc) => ({ ...doc, bookings: [...doc.bookings, booking] }))
       set({ activeBookingId: id, activeDate: booking.startDate, page: 'plan' })
       return id
@@ -352,6 +367,21 @@ export const useStore = create<State>((set, get) => {
         ...doc,
         bookings: doc.bookings.map((b) => (b.id === id ? { ...b, ...patch } : b)),
       })),
+
+    saveBooking: (id, next) =>
+      commit((doc) => {
+        const before = doc.bookings.find((b) => b.id === id)
+        if (!before) return doc
+        return {
+          ...doc,
+          bookings: doc.bookings.map((b) => (b.id === id ? next : b)),
+          blocks: doc.blocks.flatMap((block) => {
+            if (block.bookingId !== id) return [block]
+            const moved = followBooking(block, before, next)
+            return moved ? [moved] : []
+          }),
+        }
+      }),
 
     removeBooking: (id) => {
       commit((doc) => ({
@@ -413,10 +443,23 @@ export const useStore = create<State>((set, get) => {
       return withIds.map((b) => b.id)
     },
 
-    updateBlock: (id, patch) =>
+    updateBlock: (id, patch, coalesce) =>
+      commit(
+        (doc) => ({
+          ...doc,
+          blocks: doc.blocks.map((b) => (b.id === id ? { ...b, ...patch } : b)),
+        }),
+        coalesce,
+      ),
+
+    updateEach: (ids, patch) =>
       commit((doc) => ({
         ...doc,
-        blocks: doc.blocks.map((b) => (b.id === id ? { ...b, ...patch } : b)),
+        blocks: doc.blocks.map((b) => {
+          if (!ids.includes(b.id)) return b
+          const change = patch(b)
+          return change ? { ...b, ...change } : b
+        }),
       })),
 
     updateBlocks: (ids, patch) =>
@@ -750,7 +793,23 @@ export const useStore = create<State>((set, get) => {
         selection: { blockIds: [] },
       })
     },
-    setActiveDate: (date) => set({ activeDate: date }),
+    setActiveDate: (date) => {
+      // On the plan page a day belongs to a school. Asking for a day the open
+      // school isn't here for means "show me that day", so open whoever is.
+      const { doc, page, activeBookingId } = get()
+      const current = doc.bookings.find((b) => b.id === activeBookingId)
+      const covers = (b: Booking) => date !== null && date >= b.startDate && date <= b.endDate
+      if (page === 'plan' && date && (!current || !covers(current))) {
+        const onThatDay = doc.bookings
+          .filter((b) => b.site === doc.site && covers(b))
+          .sort((a, b) => a.startDate.localeCompare(b.startDate) || a.schoolName.localeCompare(b.schoolName))[0]
+        if (onThatDay) {
+          set({ activeDate: date, activeBookingId: onThatDay.id, selection: { blockIds: [] } })
+          return
+        }
+      }
+      set({ activeDate: date })
+    },
 
     select: (blockIds, additive) =>
       set((s) => ({
@@ -799,6 +858,50 @@ function withOverrides(
 const SEED_ACTIVITY_IDS = new Set(SEED_ACTIVITIES.map((a) => a.id))
 const SEED_VENUE_IDS = new Set(SEED_VENUES.map((v) => v.id))
 const SEED_STAFF_IDS = new Set(SEED_STAFF.map((p) => p.id))
+
+/**
+ * A fresh booking that hasn't been saved yet — what the "Add a school" dialog
+ * edits, so cancelling it leaves nothing behind.
+ */
+export function newBookingDraft(
+  site: Site,
+  date: string | null,
+  partial?: Partial<Booking>,
+): Booking {
+  const start = date ?? new Date().toISOString().slice(0, 10)
+  return {
+    id: uid('bkg'),
+    site,
+    schoolName: '',
+    yearLevel: '',
+    packageTier: 'gold',
+    building: '',
+    startDate: start,
+    endDate: addDays(start, 2),
+    groups: [
+      { id: uid('grp'), name: 'Group 1' },
+      { id: uid('grp'), name: 'Group 2' },
+    ],
+    ...partial,
+  }
+}
+
+/**
+ * Where a session ends up when its booking is edited, or null if it no longer
+ * has anywhere to be. Moving the arrival date moves every day with it, so a
+ * stay rebooked a week later keeps its program.
+ */
+export function followBooking(block: Block, before: Booking, after: Booking): Block | null {
+  const shift = daysBetween(before.startDate, after.startDate)
+  const date = shift === 0 ? block.date : addDays(block.date, shift)
+  if (date < after.startDate || date > after.endDate) return null
+
+  const groups = new Set(after.groups.map((g) => g.id))
+  const groupIds = block.groupIds.filter((id) => groups.has(id))
+  if (groupIds.length === 0) return null
+
+  return { ...block, date, groupIds }
+}
 
 function clampDateToBooking(date: string | null, booking: Booking): string {
   const dates = dateRange(booking.startDate, booking.endDate)

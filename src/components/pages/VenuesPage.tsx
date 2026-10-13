@@ -224,7 +224,7 @@ function VenueDialog({
         </Field>
 
         <div>
-          <span className="mb-1 block text-[11px] font-medium tracking-wide text-[var(--ink-faint)] uppercase">
+          <span className="mb-1 block text-[11px] font-medium text-[var(--ink-soft)]">
             Site
           </span>
           <div className="flex gap-3">
